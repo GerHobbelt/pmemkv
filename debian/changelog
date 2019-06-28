@@ -1,0 +1,5 @@
+pmemkv (0.8-1) experimental; urgency=medium
+
+  * Initial release (Closes: #931240)
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sat, 29 Jun 2019 00:40:22 +0200

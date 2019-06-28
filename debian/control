@@ -1,0 +1,43 @@
+Source: pmemkv
+Priority: optional
+Maintainer: Adam Borowski <kilobyte@angband.pl>
+Build-Depends: cmake,
+               debhelper-compat (= 12),
+               libgtest-dev,
+               libmemkind-dev,
+               libpmemobj-cpp-dev (>= 1.7~),
+               libtbb-dev,
+               pandoc,
+               pkg-config,
+               rapidjson-dev,
+               valgrind,
+Standards-Version: 4.3.0
+Section: libs
+Homepage: https://github.com/pmem/pmemkv
+Vcs-Browser: https://github.com/kilobyte/pmemkv/tree/debian
+Vcs-Git: https://github.com/kilobyte/pmemkv -b debian
+
+Package: libpmemkv-dev
+Section: libdevel
+Architecture: amd64
+Multi-Arch: same
+Depends: libpmemkv0 (= ${binary:Version}), ${misc:Depends}
+Description: key:value data store for persistent memory
+ Pmemkv is a family of key:value stores, developed with persistent memory
+ in mind -- yet rather than being tied to a single backing implementation,
+ it presents a common interface to a number of engines, both provided by
+ pmemkv itself and external.
+ .
+ This package contains the development headers.
+
+Package: libpmemkv0
+Architecture: amd64
+Multi-Arch: same
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: key:value data store for persistent memory
+ Pmemkv is a family of key:value stores, developed with persistent memory
+ in mind -- yet rather than being tied to a single backing implementation,
+ it presents a common interface to a number of engines, both provided by
+ pmemkv itself and external.
+ .
+ This package contains the runtime library.

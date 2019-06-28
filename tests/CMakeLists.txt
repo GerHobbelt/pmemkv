@@ -147,12 +147,12 @@ if(ENGINE_TREE3)
 	list(APPEND TEST_FILES engines-experimental/tree3_test.cc)
 endif()
 
-include(gtest)
+#include(gtest)
 include(get_tests.cmake)
 
 add_executable(pmemkv_test ${TEST_FILES})
 
-target_link_libraries(pmemkv_test pmemkv libgtest ${CMAKE_DL_LIBS})
+target_link_libraries(pmemkv_test pmemkv libgtest.a -pthread ${CMAKE_DL_LIBS})
 if(ENGINE_CACHING)
 	target_link_libraries(pmemkv_test memcached)
 endif()

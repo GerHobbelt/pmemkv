@@ -1,0 +1,5 @@
+Tests: c-ex
+Depends: gcc, libpmemkv-dev
+
+Tests: c++-ex
+Depends: g++, libpmemkv-dev

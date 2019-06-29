@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+SRC=$(pwd)
+cd "$AUTOPKGTEST_TMP"
+
+g++ -Wall -lpmemkv "$SRC/examples/pmemkv_basic_cpp/pmemkv_basic.cpp"
+
+./a.out foo | tee log
+
+diff log - <<END
+Creating config
+Starting engine
+Putting new key
+Reading key back
+Iterating existing keys
+  visited: key3
+  visited: key2
+  visited: key1
+Removing existing key
+Stopping engine
+END

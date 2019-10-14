@@ -37,11 +37,11 @@
 
 set -e
 
-echo $USERPASS | sudo -S mount -oremount,size=4G /dev/shm
 EXAMPLE_TEST_DIR="/tmp/build_example"
 PREFIX=/usr
+MEMKIND_DEFAULT_PKG_CONFIG_PATH=/opt/memkind-master/lib/pkgconfig/
+MEMKIND_DEFAULT_LD_LIBRARY_PATH=/opt/memkind-master/lib
 
-# XXX use this function
 function sudo_password() {
 	echo $USERPASS | sudo -Sk $*
 }
@@ -72,6 +72,7 @@ function compile_example_standalone() {
 	mkdir $EXAMPLE_TEST_DIR
 	cd $EXAMPLE_TEST_DIR
 
+	PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 	cmake $WORKDIR/examples/$1
 
 	# exit on error
@@ -80,7 +81,7 @@ function compile_example_standalone() {
 		return 1
 	fi
 
-	make
+	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH make
 	cd -
 }
 
@@ -88,7 +89,7 @@ function run_example_standalone() {
 	cd $EXAMPLE_TEST_DIR
 
 	rm -f pool
-	./$1 pool
+	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH ./$1 pool
 	# exit on error
 	if [[ $? != 0 ]]; then
 		cd -
@@ -98,28 +99,35 @@ function run_example_standalone() {
 	cd -
 }
 
+# Resize /dev/shm, since default one is too small
+sudo_password -S mount -oremount,size=4G /dev/shm
 cd $WORKDIR
 
-# copy Googletest to the current directory
-cp /opt/googletest/googletest-*.zip .
-
-# Make sure there is no libpmemkv currently installed
+echo
+echo "### Making sure there is no libpmemkv currently installed"
 echo "---------------------------- Error expected! ------------------------------"
 compile_example_standalone pmemkv_basic_cpp && exit 1
 echo "---------------------------------------------------------------------------"
 
-# make & install
-mkdir build
-cd build
+echo
+echo "##############################################################"
+echo "### Verify make and install (in dir: ${PREFIX})"
+echo "##############################################################"
+
+mkdir $WORKDIR/build
+cd $WORKDIR/build
+
+PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 cmake .. -DCMAKE_BUILD_TYPE=Debug \
 	-DTEST_DIR=/dev/shm \
 	-DCMAKE_INSTALL_PREFIX=$PREFIX \
 	-DCOVERAGE=$COVERAGE \
 	-DDEVELOPER_MODE=1
 
-make -j2
+make -j$(nproc)
+make doc
 ctest --output-on-failure
-echo $USERPASS | sudo -S make install
+sudo_password -S make install
 
 if [ "$COVERAGE" == "1" ]; then
 	upload_codecov tests
@@ -130,145 +138,12 @@ compile_example_standalone pmemkv_basic_c
 run_example_standalone pmemkv_basic_c
 compile_example_standalone pmemkv_basic_cpp
 run_example_standalone pmemkv_basic_cpp
+compile_example_standalone pmemkv_config_c
+run_example_standalone pmemkv_config_c
 
 # Uninstall libraries
 cd $WORKDIR/build
-echo $USERPASS | sudo -S make uninstall
+sudo_password -S make uninstall
 
-cd ..
-rm -rf build
-
-echo
-echo "##############################################################"
-echo "### Checking C++20 support in g++"
-echo "##############################################################"
-mkdir build
-cd build
-
-CXX=g++ cmake .. -DCMAKE_BUILD_TYPE=Release \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DCOVERAGE=$COVERAGE \
-	-DDEVELOPER_MODE=1 \
-	-DCXX_STANDARD=20
-
-make -j2
-# Run basic tests
-ctest -R "SimpleTest"
-
-cd ..
-rm -rf build
-
-echo
-echo "##############################################################"
-echo "### Checking C++20 support in clang++"
-echo "##############################################################"
-mkdir build
-cd build
-
-CXX=clang++ cmake .. -DCMAKE_BUILD_TYPE=Release \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DCOVERAGE=$COVERAGE \
-	-DDEVELOPER_MODE=1 \
-	-DCXX_STANDARD=20
-
-make -j2
-# Run basic tests
-ctest -R "SimpleTest"
-
-cd ..
-rm -rf build
-
-# verify if each engine is building properly
-engines_flags=(
-	ENGINE_VSMAP
-	ENGINE_VCMAP
-	ENGINE_CMAP
-	# XXX: caching engine requires libacl and memcached installed in docker images
-	# and firstly we need to remove hardcoded INCLUDE paths (see #244)
-	# ENGINE_CACHING
-	ENGINE_STREE
-	ENGINE_TREE3
-	# the last item is to test all engines disabled
-	BLACKHOLE_TEST
-)
-
-for engine_flag in "${engines_flags[@]}"
-do
-	mkdir $WORKDIR/build
-	cd $WORKDIR/build
-	# testing each engine separately; disabling default engines
-	echo
-	echo "##############################################################"
-	echo "### Verifying building of the '$engine_flag' engine"
-	echo "##############################################################"
-	cmake .. -DENGINE_VSMAP=OFF \
-		-DENGINE_VCMAP=OFF \
-		-DENGINE_CMAP=OFF \
-		-D$engine_flag=ON
-	make -j2
-	# list all tests in this build
-	ctest -N
-
-	cd -
-	rm -rf $WORKDIR/build
-done
-
-echo
-echo "##############################################################"
-echo "### Verifying building of all engines"
-echo "##############################################################"
-mkdir $WORKDIR/build
-cd $WORKDIR/build
-cmake .. -DENGINE_VSMAP=ON \
-	-DENGINE_VCMAP=ON \
-	-DENGINE_CMAP=ON \
-	-DENGINE_STREE=ON \
-	-DENGINE_TREE3=ON
-make -j2
-# list all tests in this build
-ctest -N
-
-cd ..
-rm -rf build
-
-echo
-echo "##############################################################"
-echo "### Verifying building of packages"
-echo "##############################################################"
-mkdir $WORKDIR/build
-cd $WORKDIR/build
-
-# Create fake tag, so that package has proper 'version' field
-git config user.email "test@package.com"
-git config user.name "test package"
-git tag -a 0.7 -m "0.7" HEAD~1 || true
-
-# Disable VCMAP and VSMAP until we'll get packages for memkind.
-cmake .. -DCMAKE_BUILD_TYPE=Debug \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DDEVELOPER_MODE=1 \
-	-DCPACK_GENERATOR=$PACKAGE_MANAGER \
-	-DENGINE_VCMAP=OFF \
-	-DENGINE_VSMAP=OFF
-
-# Make sure there is no libpmemkv currently installed
-echo "---------------------------- Error expected! ------------------------------"
-compile_example_standalone pmemkv_basic_cpp && exit 1
-echo "---------------------------------------------------------------------------"
-
-make package
-
-if [ $PACKAGE_MANAGER = "deb" ]; then
-	sudo_password dpkg -i libpmemkv*.deb
-elif [ $PACKAGE_MANAGER = "rpm" ]; then
-	sudo_password rpm -i libpmemkv*.rpm
-fi
-
-# Verify installed packages
-compile_example_standalone pmemkv_basic_c
-run_example_standalone pmemkv_basic_c
-compile_example_standalone pmemkv_basic_cpp
-run_example_standalone pmemkv_basic_cpp
+cd $WORKDIR
+rm -rf $WORKDIR/build

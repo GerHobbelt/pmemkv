@@ -31,9 +31,8 @@
  */
 
 #include "../../src/libpmemkv.hpp"
+#include "../../src/libpmemkv_json_config.h"
 #include "gtest/gtest.h"
-
-using namespace pmem::kv;
 
 class JsonToConfigTest : public testing::Test {
 public:
@@ -50,11 +49,10 @@ public:
 	}
 };
 
-TEST_F(JsonToConfigTest, SimpleTest)
+TEST_F(JsonToConfigTest, SimpleTest_TRACERS_M)
 {
 	auto ret = pmemkv_config_from_json(
-		config,
-		"{\"string\": \"abc\", \"int\": 123, \"bool\": true, \"double\": 12.43}");
+		config, "{\"string\": \"abc\", \"int\": 123, \"bool\": true}");
 	// XXX: extend by adding "false", subconfig, negative value
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 
@@ -73,11 +71,15 @@ TEST_F(JsonToConfigTest, SimpleTest)
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 	ASSERT_EQ(value_bool, 1);
 
-	double value_double;
-	ret = pmemkv_config_get_double(config, "double", &value_double);
-	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
-	ASSERT_EQ(value_double, 12.43);
-
 	ret = pmemkv_config_get_int64(config, "string", &value_int);
 	ASSERT_EQ(ret, PMEMKV_STATUS_CONFIG_TYPE_ERROR);
+}
+
+TEST_F(JsonToConfigTest, DoubleTest_TRACERS_M)
+{
+	auto ret = pmemkv_config_from_json(config, "{\"double\": 12.34}");
+	ASSERT_EQ(ret, PMEMKV_STATUS_CONFIG_PARSING_ERROR);
+	ASSERT_EQ(
+		std::string(pmemkv_config_from_json_errormsg()),
+		"[pmemkv_config_from_json] Unsupported data type in JSON string: Number");
 }

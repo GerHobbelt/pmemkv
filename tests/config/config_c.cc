@@ -33,18 +33,16 @@
 #include "../../src/libpmemkv.hpp"
 #include "gtest/gtest.h"
 
-using namespace pmem::kv;
-
-class ConfigTest : public testing::Test {
+class ConfigCTest : public testing::Test {
 public:
 	pmemkv_config *config;
 
-	ConfigTest()
+	ConfigCTest()
 	{
 		config = pmemkv_config_new();
 	}
 
-	~ConfigTest()
+	~ConfigCTest()
 	{
 		if (config)
 			pmemkv_config_delete(config);
@@ -56,21 +54,18 @@ struct custom_type {
 	char b;
 };
 
-void deleter(custom_type *ct_ptr)
+static void deleter(custom_type *ct_ptr)
 {
 	ct_ptr->a = -1;
 	ct_ptr->b = '0';
 }
 
-TEST_F(ConfigTest, SimpleTest)
+TEST_F(ConfigCTest, SimpleTest_TRACERS_M)
 {
 	auto ret = pmemkv_config_put_string(config, "string", "abc");
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 
 	ret = pmemkv_config_put_int64(config, "int", 123);
-	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
-
-	ret = pmemkv_config_put_double(config, "double", 12.43);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 
 	custom_type *ptr = new custom_type;
@@ -99,11 +94,6 @@ TEST_F(ConfigTest, SimpleTest)
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 	ASSERT_EQ(value_int, 123);
 
-	double value_double;
-	ret = pmemkv_config_get_double(config, "double", &value_double);
-	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
-	ASSERT_EQ(value_double, 12.43);
-
 	custom_type *value_custom_ptr;
 	ret = pmemkv_config_get_object(config, "object_ptr", (void **)&value_custom_ptr);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
@@ -126,6 +116,10 @@ TEST_F(ConfigTest, SimpleTest)
 	ASSERT_EQ(value_custom->a, 10);
 	ASSERT_EQ(value_custom->b, 'a');
 
+	int64_t none;
+	ASSERT_EQ(pmemkv_config_get_int64(config, "non-existent", &none),
+		  PMEMKV_STATUS_NOT_FOUND);
+
 	delete ptr;
 
 	pmemkv_config_delete(config);
@@ -137,7 +131,7 @@ TEST_F(ConfigTest, SimpleTest)
 	delete ptr_deleter;
 }
 
-TEST_F(ConfigTest, IntegralConversion)
+TEST_F(ConfigCTest, IntegralConversionTest_TRACERS_M)
 {
 	auto ret = pmemkv_config_put_int64(config, "int", 123);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
@@ -160,7 +154,7 @@ TEST_F(ConfigTest, IntegralConversion)
 	size_t int_us;
 	ret = pmemkv_config_get_uint64(config, "int", &int_us);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
-	ASSERT_EQ(int_us, 123);
+	ASSERT_EQ(int_us, 123U);
 
 	int64_t uint_s;
 	ret = pmemkv_config_get_int64(config, "uint", &uint_s);
@@ -170,7 +164,7 @@ TEST_F(ConfigTest, IntegralConversion)
 	size_t uint_us;
 	ret = pmemkv_config_get_uint64(config, "uint", &uint_us);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
-	ASSERT_EQ(uint_us, 123);
+	ASSERT_EQ(uint_us, 123U);
 
 	int64_t neg_int_s;
 	ret = pmemkv_config_get_int64(config, "negative-int", &neg_int_s);
@@ -189,4 +183,70 @@ TEST_F(ConfigTest, IntegralConversion)
 	ret = pmemkv_config_get_uint64(config, "uint-max", &uint_max_us);
 	ASSERT_EQ(ret, PMEMKV_STATUS_OK);
 	ASSERT_EQ(uint_max_us, std::numeric_limits<size_t>::max());
+}
+
+TEST_F(ConfigCTest, NotFoundTest_TRACERS_M)
+{
+	/* all gets should return NotFound when looking for non-existing key */
+	const char *my_string;
+	int ret = pmemkv_config_get_string(config, "non-existent-string", &my_string);
+	ASSERT_EQ(ret, PMEMKV_STATUS_NOT_FOUND);
+
+	int64_t my_int;
+	ret = pmemkv_config_get_int64(config, "non-existent-int", &my_int);
+	ASSERT_EQ(ret, PMEMKV_STATUS_NOT_FOUND);
+
+	size_t my_uint;
+	ret = pmemkv_config_get_uint64(config, "non-existent-uint", &my_uint);
+	ASSERT_EQ(ret, PMEMKV_STATUS_NOT_FOUND);
+
+	custom_type *my_object;
+	ret = pmemkv_config_get_object(config, "non-existent-object",
+				       (void **)&my_object);
+	ASSERT_EQ(ret, PMEMKV_STATUS_NOT_FOUND);
+
+	size_t my_object_size = 0;
+	ret = pmemkv_config_get_data(config, "non-existent-data",
+				     (const void **)&my_object, &my_object_size);
+	ASSERT_EQ(ret, PMEMKV_STATUS_NOT_FOUND);
+	ASSERT_EQ(my_object_size, 0);
+}
+
+/* Test if null can be passed as config to pmemkv_config_* functions */
+TEST_F(ConfigCTest, NullConfigTest)
+{
+	auto ret = pmemkv_config_put_string(nullptr, "string", "abc");
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	ret = pmemkv_config_put_int64(nullptr, "int", 123);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	custom_type *ptr = new custom_type;
+	ptr->a = 10;
+	ptr->b = 'a';
+	ret = pmemkv_config_put_object(nullptr, "object_ptr", ptr, nullptr);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	ret = pmemkv_config_put_data(nullptr, "object", ptr, sizeof(*ptr));
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	const char *value_string;
+	ret = pmemkv_config_get_string(nullptr, "string", &value_string);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	int64_t value_int;
+	ret = pmemkv_config_get_int64(nullptr, "int", &value_int);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	custom_type *value_custom_ptr;
+	ret = pmemkv_config_get_object(nullptr, "object_ptr", (void **)&value_custom_ptr);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	custom_type *value_custom;
+	size_t value_custom_size;
+	ret = pmemkv_config_get_data(nullptr, "object", (const void **)&value_custom,
+				     &value_custom_size);
+	ASSERT_EQ(ret, PMEMKV_STATUS_INVALID_ARGUMENT);
+
+	delete ptr;
 }

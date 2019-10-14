@@ -41,13 +41,13 @@ public:
 
 	BlackholeTest()
 	{
-		auto s = kv.open("blackhole", nullptr);
+		auto s = kv.open("blackhole");
 		if (s != status::OK)
-			throw std::runtime_error(db::errormsg());
+			throw std::runtime_error(errormsg());
 	}
 };
 
-TEST_F(BlackholeTest, SimpleTest)
+TEST_F(BlackholeTest, SimpleTest_TRACERS_MP)
 {
 	std::string value;
 	std::size_t cnt = 1;
@@ -64,4 +64,22 @@ TEST_F(BlackholeTest, SimpleTest)
 	ASSERT_TRUE(kv.get("key1", &value) == status::NOT_FOUND);
 	ASSERT_TRUE(kv.remove("key1") == status::OK);
 	ASSERT_TRUE(kv.get("key1", &value) == status::NOT_FOUND);
+}
+
+/* XXX port it to other engines */
+TEST_F(BlackholeTest, ErrormsgTest)
+{
+	auto s = kv.open("non-existing name");
+	ASSERT_TRUE(s == pmem::kv::status::WRONG_ENGINE_NAME);
+
+	auto err = pmem::kv::errormsg();
+	ASSERT_TRUE(err.size() > 0);
+
+	s = kv.open("non-existing name");
+	ASSERT_TRUE(s == pmem::kv::status::WRONG_ENGINE_NAME);
+	s = kv.open("non-existing name");
+	ASSERT_TRUE(s == pmem::kv::status::WRONG_ENGINE_NAME);
+
+	/* Test whether errormsg is cleared correctly after each error */
+	ASSERT_TRUE(pmem::kv::errormsg() == err);
 }

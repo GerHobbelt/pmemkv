@@ -4,7 +4,7 @@ Content-Style: 'text/css'
 title: _MP(PMEMKV, 7)
 collection: libpmemkv
 header: PMEMKV
-date: pmemkv version 0.8
+date: pmemkv version 1.0
 ...
 
 [comment]: <> (Copyright 2019, Intel Corporation)
@@ -79,21 +79,32 @@ Each engine can be manually turned on and off at build time, using CMake options
 
 ## cmap
 
-A persistent concurrent engine, backed by a hashmap that allows calling get, put, and remove concurrently from multiple threads.
+A persistent concurrent engine, backed by a hashmap that allows calling get, put, and remove concurrently from multiple threads and ensures good scalability. Rest of the methods (e.g. range query methods) are not thread-safe and should not be called from more than one thread.
 Data stored using this engine is persistent and guaranteed to be consistent in case of any kind of interruption (crash / power loss / etc).
 
-Internally this engine uses persistent concurrent hashmap and persistent string from libpmemobj-cpp library (for details see <https://github.com/pmem/libpmemobj-cpp>). Persistent string is used as a type of a key and a value.
+Internally this engine uses persistent concurrent hashmap and persistent string from libpmemobj-cpp library (for details see <https://github.com/pmem/libpmemobj-cpp>). Persistent string is used as a type of a key and a value. Engine's functions should not be called within libpmemobj transactions (improper call by user will result thrown exception).
 TBB and libpmemobj-cpp packages are required.
 
 This engine requires the following config parameters (see **libpmemkv_config**(3) for details how to set them):
 
-* **path** -- Path to the database file
-    + type: string
-* **force_create** -- If 0, pmemkv opens file specified by 'path', otherwise it creats it
-    + type: uint64_t
-    + default value: 0
-* **size** --  Only needed when force_create is not 0, specifies size of the database
-    + type: uint64_t
+* **path** -- Path to the database file.
+	+ type: string
+* **force_create** -- If 0, pmemkv opens file specified by 'path', otherwise it creates it.
+	+ type: uint64_t
+	+ default value: 0
+* **size** --  Only needed when force_create is not 0, specifies size of the database [in bytes].
+	+ type: uint64_t
+	+ min value: 8388608 (8MB)
+* **oid** -- Pointer to oid (for details see **libpmemobj**(7)) which points to engine data. If oid is null, engine will allocate new data, otherwise it will use existing one.
+	+ type: object
+
+The following table shows three possible combinations of parameters (where '-' means 'cannot be set'):
+
+| **#** | **path** | **force_create** | **size** | **oid** |
+| ----- | -------- | ---------------- | -------- | ------- |
+| **1** | set | 0 | - | - |
+| **2** | set | 1 | set | - |
+| **3** | - | - | - | set |
 
 ## vcmap
 
@@ -105,9 +116,10 @@ Memkind, TBB and libpmemobj-cpp packages are required.
 This engine requires the following config parameters (see **libpmemkv_config**(3) for details how to set them):
 
 * **path** -- Path to the database file
-    + type: string
-* **size** --  Specifies size of the database
-    + type: uint64_t
+	+ type: string
+* **size** --  Specifies size of the database [in bytes]
+	+ type: uint64_t
+	+ min value: 8388608 (8MB)
 
 ## vsmap
 
@@ -119,9 +131,10 @@ Memkind and libpmemobj-cpp packages are required.
 This engine requires the following config parameters (see **libpmemkv_config**(3) for details how to set them):
 
 * **path** -- Path to the database file
-    + type: string
-* **size** --  Specifies size of the database
-    + type: uint64_t
+	+ type: string
+* **size** --  Specifies size of the database [in bytes]
+	+ type: uint64_t
+	+ min value: 8388608 (8MB)
 
 ## blackhole
 
@@ -134,6 +147,7 @@ No supported configuration parameters.
 ### Experimental engines
 
 There are also more engines in various states of development, for details see <https://github.com/pmem/pmemkv>.
+Two of them (tree3 and stree) requires the config parameters like cmap and similarly to cmap should not be used within transaction(s).
 
 # BINDINGS #
 
@@ -141,11 +155,15 @@ Bindings for other languages are available on GitHub. Currently they support onl
 
 Existing bindings:
 
-+ Ruby - for details see <https://github.com/pmem/pmemkv-ruby>
++ Java - for details see <https://github.com/pmem/pmemkv-java>
 
-+ JNI & Java - for details see <https://github.com/pmem/pmemkv-java>
++ JNI - for details see <https://github.com/pmem/pmemkv-jni>
 
 + Node.js - for details see <https://github.com/pmem/pmemkv-nodejs>
+
++ Python - for details see <https://github.com/pmem/pmemkv-python>
+
++ Ruby - for details see <https://github.com/pmem/pmemkv-ruby>
 
 # SEE ALSO #
 

@@ -1,4 +1,5 @@
-# Copyright 2017-2019, Intel Corporation
+#
+# Copyright 2019, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -28,29 +29,20 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(GTEST_VERSION 1.7.0)
-set(GTEST_SHA256HASH b58cb7547a28b2c718d1e38aee18a3659c9e3ff52440297e965f5edffe34b6d0)
+cmake_minimum_required(VERSION 3.5)
+project(pmemkv_pmemobj_basic CXX)
 
-if (EXISTS ${CMAKE_SOURCE_DIR}/googletest-${GTEST_VERSION}.zip)
-    set(GTEST_URL ${CMAKE_SOURCE_DIR}/googletest-${GTEST_VERSION}.zip)
-else ()
-    set(GTEST_URL https://github.com/google/googletest/archive/release-${GTEST_VERSION}.zip)
-endif ()
+set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.8)
 
-ExternalProject_Add(
-    gtest
-    URL ${GTEST_URL}
-    URL_HASH SHA256=${GTEST_SHA256HASH}
-    DOWNLOAD_NAME googletest-${GTEST_VERSION}.zip
-    DOWNLOAD_DIR ${CMAKE_SOURCE_DIR}
-    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
-    INSTALL_COMMAND ""
-    CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-)
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+	pkg_check_modules(LIBPMEMKV REQUIRED libpmemkv)
+	pkg_check_modules(LIBPMEMOBJ++ REQUIRED libpmemobj++>=${LIBPMEMOBJ_CPP_REQUIRED_VERSION})
+else()
+	message(FATAL_ERROR "pkg-config not found")
+endif()
 
-ExternalProject_Get_Property(gtest source_dir binary_dir)
-add_library(libgtest IMPORTED STATIC GLOBAL)
-add_dependencies(libgtest gtest)
-set_target_properties(libgtest PROPERTIES "IMPORTED_LOCATION" "${binary_dir}/libgtest.a"
-                      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}")
-include_directories("${source_dir}/include")
+include_directories(${LIBPMEMKV_INCLUDE_DIRS})
+link_directories(${LIBPMEMKV_LIBRARY_DIRS})
+add_executable(pmemkv_pmemobj_basic_cpp pmemkv_pmemobj_basic.cpp)
+target_link_libraries(pmemkv_pmemobj_basic_cpp ${LIBPMEMKV_LIBRARIES} ${LIBPMEMOBJ++_LIBRARIES})

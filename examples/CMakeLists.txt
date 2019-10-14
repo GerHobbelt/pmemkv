@@ -29,25 +29,19 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_common_flag(-Wall)
-add_common_flag(-Wpointer-arith)
-add_common_flag(-Wsign-compare)
-add_common_flag(-Wunreachable-code-return)
-add_common_flag(-Wmissing-variable-declarations)
-add_common_flag(-fno-common)
-add_common_flag(-Wunused-macros)
-add_common_flag(-Wsign-conversion)
-
-add_common_flag(-ggdb DEBUG)
-add_common_flag(-DDEBUG DEBUG)
-
-add_common_flag("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" RELEASE)
+add_common_flag(-Wno-unused-but-set-variable)
 
 add_cppstyle(examples-pmemkv_basic_c ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_basic_c/*.c)
 add_check_whitespace(examples-pmemkv_basic_c ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_basic_c/*.c)
 
 add_cppstyle(examples-pmemkv_basic_cpp ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_basic_cpp/*.cpp)
 add_check_whitespace(examples-pmemkv_basic_cpp ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_basic_cpp/*.cpp)
+
+add_cppstyle(examples-pmemkv_pmemobj_cpp ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_pmemobj_cpp/*.cpp)
+add_check_whitespace(examples-pmemkv_pmemobj_cpp ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_pmemobj_cpp/*.cpp)
+
+add_cppstyle(examples-pmemkv_config_c ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_config_c/*.c)
+add_check_whitespace(examples-pmemkv_config_c ${CMAKE_CURRENT_SOURCE_DIR}/pmemkv_config_c/*.c)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
@@ -62,3 +56,11 @@ target_link_libraries(example-pmemkv_basic_cpp pmemkv)
 
 add_example(pmemkv_basic_c pmemkv_basic_c/pmemkv_basic.c)
 target_link_libraries(example-pmemkv_basic_c pmemkv)
+
+if(ENGINE_CMAP)
+	add_example(pmemkv_pmemobj_basic_cpp pmemkv_pmemobj_cpp/pmemkv_pmemobj_basic.cpp)
+	target_link_libraries(example-pmemkv_pmemobj_basic_cpp pmemkv ${LIBPMEMOBJ++_LIBRARIES})
+endif()
+
+add_example(pmemkv_config_c pmemkv_config_c/pmemkv_config.c)
+target_link_libraries(example-pmemkv_config_c pmemkv pmemkv_json_config)

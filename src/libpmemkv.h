@@ -41,13 +41,16 @@ extern "C" {
 #endif
 
 #define PMEMKV_STATUS_OK 0
-#define PMEMKV_STATUS_FAILED 1
+#define PMEMKV_STATUS_UNKNOWN_ERROR 1
 #define PMEMKV_STATUS_NOT_FOUND 2
 #define PMEMKV_STATUS_NOT_SUPPORTED 3
 #define PMEMKV_STATUS_INVALID_ARGUMENT 4
 #define PMEMKV_STATUS_CONFIG_PARSING_ERROR 5
 #define PMEMKV_STATUS_CONFIG_TYPE_ERROR 6
 #define PMEMKV_STATUS_STOPPED_BY_CB 7
+#define PMEMKV_STATUS_OUT_OF_MEMORY 8
+#define PMEMKV_STATUS_WRONG_ENGINE_NAME 9
+#define PMEMKV_STATUS_TRANSACTION_SCOPE_ERROR 10
 
 typedef struct pmemkv_db pmemkv_db;
 typedef struct pmemkv_config pmemkv_config;
@@ -64,16 +67,13 @@ int pmemkv_config_put_object(pmemkv_config *config, const char *key, void *value
 			     void (*deleter)(void *));
 int pmemkv_config_put_uint64(pmemkv_config *config, const char *key, uint64_t value);
 int pmemkv_config_put_int64(pmemkv_config *config, const char *key, int64_t value);
-int pmemkv_config_put_double(pmemkv_config *config, const char *key, double value);
 int pmemkv_config_put_string(pmemkv_config *config, const char *key, const char *value);
 int pmemkv_config_get_data(pmemkv_config *config, const char *key, const void **value,
 			   size_t *value_size);
 int pmemkv_config_get_object(pmemkv_config *config, const char *key, void **value);
 int pmemkv_config_get_uint64(pmemkv_config *config, const char *key, uint64_t *value);
 int pmemkv_config_get_int64(pmemkv_config *config, const char *key, int64_t *value);
-int pmemkv_config_get_double(pmemkv_config *config, const char *key, double *value);
 int pmemkv_config_get_string(pmemkv_config *config, const char *key, const char **value);
-int pmemkv_config_from_json(pmemkv_config *config, const char *jsonconfig);
 
 int pmemkv_open(const char *engine, pmemkv_config *config, pmemkv_db **db);
 void pmemkv_close(pmemkv_db *kv);

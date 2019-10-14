@@ -39,13 +39,6 @@
 #include "../out.h"
 #include "stree.h"
 
-#define DO_LOG 0
-#define LOG(msg)                                                                         \
-	do {                                                                             \
-		if (DO_LOG)                                                              \
-			std::cout << "[stree] " << msg << "\n";                          \
-	} while (0)
-
 using pmem::detail::conditional_add_to_tx;
 using pmem::obj::make_persistent_atomic;
 using pmem::obj::transaction;
@@ -55,42 +48,14 @@ namespace pmem
 namespace kv
 {
 
-stree::stree(std::unique_ptr<internal::config> cfg)
+stree::stree(std::unique_ptr<internal::config> cfg) : pmemobj_engine_base(cfg)
 {
-	const char *path;
-	std::size_t size;
-
-	if (cfg->get_string("path", &path) != status::OK)
-		throw std::runtime_error("Config does not contain path");
-
-	uint64_t force_create;
-	auto ret = cfg->get_uint64("force_create", &force_create);
-
-	if (ret == status::NOT_FOUND)
-		force_create = 0;
-	else if (ret != status::OK)
-		throw std::runtime_error("Cannot get force_create from config");
-
-	if (force_create) {
-		if (cfg->get_uint64("size", &size) != status::OK)
-			throw std::runtime_error("Config does not contain size");
-
-		LOG("Creating filesystem pool, path=" << path << ", size="
-						      << std::to_string(size));
-		pmpool = pool<RootData>::create(path, LAYOUT, size, S_IRWXU);
-	} else {
-		LOG("Opening pool, path=" << path);
-		pmpool = pool<RootData>::open(path, LAYOUT);
-	}
-
 	Recover();
 	LOG("Started ok");
 }
 
 stree::~stree()
 {
-	LOG("Stopping");
-	pmpool.close();
 	LOG("Stopped ok");
 }
 
@@ -102,11 +67,12 @@ std::string stree::name()
 status stree::count_all(std::size_t &cnt)
 {
 	LOG("count_all");
-	std::size_t result = 0;
-	for (auto &iterator : *my_btree)
-		result++;
+	check_outside_tx();
 
-	cnt = result;
+	auto result = std::distance(my_btree->begin(), my_btree->end());
+	assert(result >= 0);
+
+	cnt = static_cast<std::size_t>(result);
 
 	return status::OK;
 }
@@ -114,6 +80,7 @@ status stree::count_all(std::size_t &cnt)
 status stree::get_all(get_kv_callback *callback, void *arg)
 {
 	LOG("get_all");
+	check_outside_tx();
 	for (auto &iterator : *my_btree) {
 		auto ret = callback(iterator.first.c_str(), iterator.first.size(),
 				    iterator.second.c_str(), iterator.second.size(), arg);
@@ -127,7 +94,9 @@ status stree::get_all(get_kv_callback *callback, void *arg)
 status stree::exists(string_view key)
 {
 	LOG("exists for key=" << std::string(key.data(), key.size()));
-	btree_type::iterator it = my_btree->find(pstring<20>(key.data(), key.size()));
+	check_outside_tx();
+	internal::stree::btree_type::iterator it =
+		my_btree->find(pstring<20>(key.data(), key.size()));
 	if (it == my_btree->end()) {
 		LOG("  key not found");
 		return status::NOT_FOUND;
@@ -138,7 +107,9 @@ status stree::exists(string_view key)
 status stree::get(string_view key, get_v_callback *callback, void *arg)
 {
 	LOG("get using callback for key=" << std::string(key.data(), key.size()));
-	btree_type::iterator it = my_btree->find(pstring<20>(key.data(), key.size()));
+	check_outside_tx();
+	internal::stree::btree_type::iterator it =
+		my_btree->find(pstring<20>(key.data(), key.size()));
 	if (it == my_btree->end()) {
 		LOG("  key not found");
 		return status::NOT_FOUND;
@@ -152,57 +123,42 @@ status stree::put(string_view key, string_view value)
 {
 	LOG("put key=" << std::string(key.data(), key.size())
 		       << ", value.size=" << std::to_string(value.size()));
-	try {
-		auto result = my_btree->insert(std::make_pair(
-			pstring<MAX_KEY_SIZE>(key.data(), key.size()),
-			pstring<MAX_VALUE_SIZE>(value.data(), value.size())));
-		if (!result.second) { // key already exists, so update
-			typename btree_type::value_type &entry = *result.first;
-			transaction::manual tx(pmpool);
-			conditional_add_to_tx(&(entry.second));
-			entry.second = std::string(value.data(), value.size());
-			transaction::commit();
-		}
-		return status::OK;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
+	check_outside_tx();
+
+	auto result = my_btree->insert(std::make_pair(
+		pstring<internal::stree::MAX_KEY_SIZE>(key.data(), key.size()),
+		pstring<internal::stree::MAX_VALUE_SIZE>(value.data(), value.size())));
+	if (!result.second) { // key already exists, so update
+		typename internal::stree::btree_type::value_type &entry = *result.first;
+		transaction::manual tx(pmpool);
+		conditional_add_to_tx(&(entry.second));
+		entry.second = std::string(value.data(), value.size());
+		transaction::commit();
 	}
+	return status::OK;
 }
 
 status stree::remove(string_view key)
 {
 	LOG("remove key=" << std::string(key.data(), key.size()));
-	try {
-		auto result = my_btree->erase(std::string(key.data(), key.size()));
-		return (result == 1) ? status::OK : status::NOT_FOUND;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
-	}
+	check_outside_tx();
+
+	auto result = my_btree->erase(std::string(key.data(), key.size()));
+	return (result == 1) ? status::OK : status::NOT_FOUND;
 }
 
 void stree::Recover()
 {
-	auto root_data = pmpool.root();
-	if (root_data->btree_ptr) {
-		my_btree = root_data->btree_ptr.get();
+	if (!OID_IS_NULL(*root_oid)) {
+		my_btree = (internal::stree::btree_type *)pmemobj_direct(*root_oid);
 		my_btree->garbage_collection();
 	} else {
-		make_persistent_atomic<btree_type>(pmpool, root_data->btree_ptr);
-		my_btree = root_data->btree_ptr.get();
+		pmem::obj::transaction::manual tx(pmpool);
+		pmem::obj::transaction::snapshot(root_oid);
+		*root_oid =
+			pmem::obj::make_persistent<internal::stree::btree_type>().raw();
+		pmem::obj::transaction::commit();
+		my_btree = (internal::stree::btree_type *)pmemobj_direct(*root_oid);
 	}
 }
 

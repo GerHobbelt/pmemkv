@@ -39,15 +39,6 @@
 #include <memory>
 #include <unistd.h>
 
-// XXX: needed to create subEngine, remove once configure structure is created
-#include "../libpmemkv.hpp"
-
-#define DO_LOG 0
-#define LOG(msg)                                                                         \
-	do {                                                                             \
-		if (DO_LOG)                                                              \
-			std::cout << "[caching] " << msg << "\n";                        \
-	} while (0)
 #define ZERO 0
 
 namespace pmem
@@ -55,28 +46,83 @@ namespace pmem
 namespace kv
 {
 
+static time_t convertTimeToEpoch(const char *theTime, const char *format = "%Y%m%d%H%M%S")
+{
+	std::tm tmTime;
+	memset(&tmTime, 0, sizeof(tmTime));
+	strptime(theTime, format, &tmTime);
+	return mktime(&tmTime);
+}
+
+static std::string getTimeStamp(const time_t epochTime,
+				const char *format = "%Y%m%d%H%M%S")
+{
+	char timestamp[64] = {0};
+	strftime(timestamp, sizeof(timestamp), format, localtime(&epochTime));
+	return timestamp;
+}
+
+static bool valueFieldConversion(std::string dateValue, int64_t ttl)
+{
+	bool timeValidFlag = false;
+	if (ttl > ZERO) {
+		const time_t now = convertTimeToEpoch(dateValue.c_str());
+		struct tm then_tm = *localtime(&now);
+		char ttlTimeStr[80];
+
+		then_tm.tm_sec += ttl;
+		mktime(&then_tm);
+		std::strftime(ttlTimeStr, 80, "%Y%m%d%H%M%S", &then_tm);
+
+		const time_t curTime = time(0);
+		std::string curTimeStr = getTimeStamp(curTime);
+
+		if (ttlTimeStr >= curTimeStr)
+			timeValidFlag = true;
+	}
+	return timeValidFlag;
+}
+
 caching::caching(std::unique_ptr<internal::config> cfg)
 {
-	if (!readConfig(*cfg))
-		throw std::runtime_error(
-			"caching Exception"); // todo propagate start exceptions properly
+	auto &config = *cfg;
 
-	if (!(basePtr = new db))
-		throw std::runtime_error(
-			"caching Exception"); // todo propagate start exceptions properly
+	std::string subEngine;
+	getString(config, "subengine", subEngine);
 
-	if (basePtr->open(subEngine, subEngineConfig) != status::OK)
-		throw std::runtime_error(
-			"caching Exception"); // todo propagate start exceptions properly
+	getString(config, "remote_type", remoteType);
+	getString(config, "remote_user", remoteUser);
+	getString(config, "remote_pwd", remotePasswd);
+	getString(config, "remote_url", remoteUrl);
+	getString(config, "host", host);
+
+	if (!config.get_int64("ttl", &ttl))
+		ttl = 0;
+
+	if (!config.get_int64("port", &port))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"port\"");
+
+	if (!config.get_int64("attempts", &attempts))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"attempts\"");
+
+	internal::config *subEngineConfig;
+	if (!config.get_object("subengine_config", (void **)&subEngineConfig))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"subengine_config\"");
+
+	/* Remove item to pass ownership of it to subengine */
+	config.remove("subengine_config");
+
+	basePtr = engine_base::create_engine(
+		subEngine, std::unique_ptr<internal::config>(subEngineConfig));
 
 	LOG("Started ok");
 }
 
 caching::~caching()
 {
-	LOG("Stopping");
-	if (basePtr)
-		delete basePtr;
 	LOG("Stopped ok");
 }
 
@@ -85,57 +131,16 @@ std::string caching::name()
 	return "caching";
 }
 
-bool caching::getString(internal::config &config, const char *key, std::string &str)
+void caching::getString(internal::config &config, const char *key, std::string &str)
 {
 	const char *value;
 
-	if (config.get_string(key, &value) != status::OK)
-		return false;
+	if (!config.get_string(key, &value))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"" + std::string(key) +
+			"\"");
 
 	str = std::string(value);
-
-	return true;
-}
-
-bool caching::readConfig(internal::config &config)
-{
-	if (!getString(config, "subengine", subEngine))
-		return false;
-
-	if (!getString(config, "remote_type", remoteType))
-		return false;
-
-	if (!getString(config, "remote_user", remoteUser))
-		return false;
-
-	if (!getString(config, "remote_pwd", remotePasswd))
-		return false;
-
-	if (!getString(config, "remote_url", remoteUrl))
-		return false;
-
-	if (!getString(config, "host", host))
-		return false;
-
-	auto ret = config.get_int64("ttl", &ttl);
-	if (ret == status::NOT_FOUND)
-		ttl = 0;
-	else if (ret != status::OK)
-		return false;
-
-	ret = config.get_int64("port", &port);
-	if (ret != status::OK)
-		return false;
-
-	ret = config.get_int64("attempts", &attempts);
-	if (ret != status::OK)
-		return false;
-
-	ret = config.get_object("subengine_config", (void **)&subEngineConfig);
-	if (ret != status::OK)
-		return false;
-
-	return true;
 }
 
 status caching::count_all(std::size_t &cnt)
@@ -160,13 +165,14 @@ struct GetAllCacheCallbackContext {
 	void *arg;
 	get_kv_callback *cBack;
 	std::list<std::string> *expiredKeys;
+	int64_t ttl;
 };
 
 status caching::get_all(get_kv_callback *callback, void *arg)
 {
 	LOG("get_all");
 	std::list<std::string> removingKeys;
-	GetAllCacheCallbackContext cxt = {arg, callback, &removingKeys};
+	GetAllCacheCallbackContext cxt = {arg, callback, &removingKeys, ttl};
 
 	auto cb = [](const char *k, size_t kb, const char *v, size_t vb, void *arg) {
 		const auto c = ((GetAllCacheCallbackContext *)arg);
@@ -174,7 +180,7 @@ status caching::get_all(get_kv_callback *callback, void *arg)
 		std::string timeStamp = localValue.substr(0, 14);
 		std::string value = localValue.substr(14);
 		// TTL from config is ZERO or if the key is valid
-		if (!ttl || valueFieldConversion(timeStamp)) {
+		if (!c->ttl || valueFieldConversion(timeStamp, c->ttl)) {
 			auto ret = c->cBack(k, kb, value.c_str(), value.length(), c->arg);
 			if (ret != 0)
 				return ret;
@@ -193,7 +199,7 @@ status caching::get_all(get_kv_callback *callback, void *arg)
 		for (const auto &itr : removingKeys) {
 			auto s = basePtr->remove(itr);
 			if (s != status::OK)
-				return status::FAILED;
+				return s;
 		}
 	}
 
@@ -208,7 +214,6 @@ status caching::exists(string_view key)
 	if (getKey(std::string(key.data(), key.size()), value, true))
 		s = status::OK;
 	return s;
-	// todo fold into single return statement
 }
 
 status caching::get(string_view key, get_v_callback *callback, void *arg)
@@ -234,7 +239,7 @@ bool caching::getKey(const std::string &key, std::string &valueField, bool api_f
 	if (!value.empty()) {
 		std::string timeStamp = value.substr(0, 14);
 		valueField = value.substr(14);
-		timeValidFlag = valueFieldConversion(timeStamp);
+		timeValidFlag = valueFieldConversion(timeStamp, ttl);
 	}
 	// No value for a key on local cache or if TTL not equal to zero and TTL is
 	// expired
@@ -328,42 +333,6 @@ status caching::remove(string_view key)
 {
 	LOG("remove key=" << std::string(key.data(), key.size()));
 	return basePtr->remove(std::string(key.data(), key.size()));
-}
-
-time_t convertTimeToEpoch(const char *theTime, const char *format)
-{
-	std::tm tmTime;
-	memset(&tmTime, 0, sizeof(tmTime));
-	strptime(theTime, format, &tmTime);
-	return mktime(&tmTime);
-}
-
-std::string getTimeStamp(const time_t epochTime, const char *format)
-{
-	char timestamp[64] = {0};
-	strftime(timestamp, sizeof(timestamp), format, localtime(&epochTime));
-	return timestamp;
-}
-
-bool valueFieldConversion(std::string dateValue)
-{
-	bool timeValidFlag = false;
-	if (ttl > ZERO) {
-		const time_t now = convertTimeToEpoch(dateValue.c_str());
-		struct tm then_tm = *localtime(&now);
-		char ttlTimeStr[80];
-
-		then_tm.tm_sec += ttl;
-		mktime(&then_tm);
-		std::strftime(ttlTimeStr, 80, "%Y%m%d%H%M%S", &then_tm);
-
-		const time_t curTime = time(0);
-		std::string curTimeStr = getTimeStamp(curTime);
-
-		if (ttlTimeStr >= curTimeStr)
-			timeValidFlag = true;
-	}
-	return timeValidFlag;
 }
 
 } // namespace kv

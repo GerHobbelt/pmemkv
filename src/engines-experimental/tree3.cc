@@ -40,54 +40,19 @@
 #include <list>
 #include <unistd.h>
 
-#define DO_LOG 0
-#define LOG(msg)                                                                         \
-	do {                                                                             \
-		if (DO_LOG)                                                              \
-			std::cout << "[tree3] " << msg << "\n";                          \
-	} while (0)
-
 namespace pmem
 {
 namespace kv
 {
 
-tree3::tree3(std::unique_ptr<internal::config> cfg)
+tree3::tree3(std::unique_ptr<internal::config> cfg) : pmemobj_engine_base(cfg)
 {
-	const char *path;
-	std::size_t size;
-
-	if (cfg->get_string("path", &path) != status::OK)
-		throw std::runtime_error("Config does not contain path");
-
-	uint64_t force_create;
-	auto ret = cfg->get_uint64("force_create", &force_create);
-
-	if (ret == status::NOT_FOUND)
-		force_create = 0;
-	else if (ret != status::OK)
-		throw std::runtime_error("Cannot get force_create from config");
-
-	if (force_create) {
-		if (cfg->get_uint64("size", &size) != status::OK)
-			throw std::runtime_error("Config does not contain size");
-
-		LOG("Creating filesystem pool, path=" << path << ", size="
-						      << std::to_string(size));
-		pmpool = pool<KVRoot>::create(path, LAYOUT, size, S_IRWXU);
-	} else {
-		LOG("Opening pool, path=" << path);
-		pmpool = pool<KVRoot>::open(path, LAYOUT);
-	}
-
 	Recover();
 	LOG("Started ok");
 }
 
 tree3::~tree3()
 {
-	LOG("Stopping");
-	pmpool.close();
 	LOG("Stopped ok");
 }
 
@@ -102,8 +67,10 @@ std::string tree3::name()
 
 status tree3::count_all(std::size_t &cnt)
 {
+	LOG("count_all");
+	check_outside_tx();
 	std::size_t result = 0;
-	auto leaf = pmpool.root()->head;
+	auto leaf = (pmem::kv::internal::tree3::KVLeaf *)pmemobj_direct(*root_oid);
 	while (leaf) {
 		for (int slot = LEAF_KEYS; slot--;) {
 			auto kvslot = leaf->slots[slot].get_ro();
@@ -111,7 +78,7 @@ status tree3::count_all(std::size_t &cnt)
 				continue;
 			result++;
 		}
-		leaf = leaf->next; // advance to next linked leaf
+		leaf = leaf->next.get(); // advance to next linked leaf
 	}
 
 	cnt = result;
@@ -122,7 +89,8 @@ status tree3::count_all(std::size_t &cnt)
 status tree3::get_all(get_kv_callback *callback, void *arg)
 {
 	LOG("get_all");
-	auto leaf = pmpool.root()->head;
+	check_outside_tx();
+	auto leaf = (pmem::kv::internal::tree3::KVLeaf *)pmemobj_direct(*root_oid);
 	while (leaf) {
 		for (int slot = LEAF_KEYS; slot--;) {
 			auto kvslot = leaf->slots[slot].get_ro();
@@ -133,7 +101,7 @@ status tree3::get_all(get_kv_callback *callback, void *arg)
 			if (ret != 0)
 				return status::STOPPED_BY_CB;
 		}
-		leaf = leaf->next; // advance to next linked leaf
+		leaf = leaf->next.get(); // advance to next linked leaf
 	}
 
 	return status::OK;
@@ -142,6 +110,7 @@ status tree3::get_all(get_kv_callback *callback, void *arg)
 status tree3::exists(string_view key)
 {
 	LOG("exists for key=" << std::string(key.data(), key.size()));
+	check_outside_tx();
 	// XXX - do not create temporary string
 	auto leafnode = LeafSearch(std::string(key.data(), key.size()));
 	if (leafnode) {
@@ -161,6 +130,7 @@ status tree3::exists(string_view key)
 status tree3::get(string_view key, get_v_callback *callback, void *arg)
 {
 	LOG("get using callback for key=" << std::string(key.data(), key.size()));
+	check_outside_tx();
 	// XXX - do not create temporary string
 	auto leafnode = LeafSearch(std::string(key.data(), key.size()));
 	if (leafnode) {
@@ -188,106 +158,90 @@ status tree3::put(string_view key, string_view value)
 {
 	LOG("put key=" << std::string(key.data(), key.size())
 		       << ", value.size=" << std::to_string(value.size()));
-	try {
-		const auto hash = PearsonHash(key.data(), key.size());
+	check_outside_tx();
+
+	const auto hash = PearsonHash(key.data(), key.size());
+	// XXX - do not create temporary string
+	auto leafnode = LeafSearch(std::string(key.data(), key.size()));
+	if (!leafnode) {
+		LOG("   adding head leaf");
+		unique_ptr<internal::tree3::KVLeafNode> new_node(
+			new internal::tree3::KVLeafNode());
+		new_node->is_leaf = true;
+		transaction::run(pmpool, [&] {
+			if (!leaves_prealloc.empty()) {
+				new_node->leaf = leaves_prealloc.back();
+				leaves_prealloc.pop_back();
+			} else {
+				auto old_head = persistent_ptr<internal::tree3::KVLeaf>(
+					*root_oid);
+				auto new_leaf =
+					make_persistent<internal::tree3::KVLeaf>();
+				transaction::snapshot(root_oid);
+				*root_oid = new_leaf.raw();
+				new_leaf->next = old_head;
+				new_node->leaf = new_leaf;
+			}
+			LeafFillSpecificSlot(new_node.get(), hash,
+					     std::string(key.data(), key.size()),
+					     std::string(value.data(), value.size()), 0);
+		});
+		tree_top = move(new_node);
+	} else if (LeafFillSlotForKey(leafnode, hash, std::string(key.data(), key.size()),
+				      std::string(value.data(), value.size()))) {
+		// nothing else to do
+	} else {
 		// XXX - do not create temporary string
-		auto leafnode = LeafSearch(std::string(key.data(), key.size()));
-		if (!leafnode) {
-			LOG("   adding head leaf");
-			unique_ptr<KVLeafNode> new_node(new KVLeafNode());
-			new_node->is_leaf = true;
-			transaction::run(pmpool, [&] {
-				if (!leaves_prealloc.empty()) {
-					new_node->leaf = leaves_prealloc.back();
-					leaves_prealloc.pop_back();
-				} else {
-					auto root = pmpool.root();
-					auto old_head = root->head;
-					auto new_leaf = make_persistent<KVLeaf>();
-					root->head = new_leaf;
-					new_leaf->next = old_head;
-					new_node->leaf = new_leaf;
-				}
-				LeafFillSpecificSlot(
-					new_node.get(), hash,
-					std::string(key.data(), key.size()),
-					std::string(value.data(), value.size()), 0);
-			});
-			tree_top = move(new_node);
-		} else if (LeafFillSlotForKey(leafnode, hash,
-					      std::string(key.data(), key.size()),
-					      std::string(value.data(), value.size()))) {
-			// nothing else to do
-		} else {
-			// XXX - do not create temporary string
-			LeafSplitFull(leafnode, hash, std::string(key.data(), key.size()),
-				      std::string(value.data(), value.size()));
-		}
-		return status::OK;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
+		LeafSplitFull(leafnode, hash, std::string(key.data(), key.size()),
+			      std::string(value.data(), value.size()));
 	}
+	return status::OK;
 }
 
 status tree3::remove(string_view key)
 {
 	LOG("remove key=" << std::string(key.data(), key.size()));
+	check_outside_tx();
+
 	// XXX - do not create temporary string
 	auto leafnode = LeafSearch(std::string(key.data(), key.size()));
 	if (!leafnode) {
 		LOG("   head not present");
 		return status::NOT_FOUND;
 	}
-	try {
-		const auto hash = PearsonHash(key.data(), key.size());
-		for (int slot = LEAF_KEYS; slot--;) {
-			if (leafnode->hashes[slot] == hash) {
-				if (leafnode->keys[slot].compare(
-					    std::string(key.data(), key.size())) == 0) {
-					LOG("   freeing slot=" << slot);
-					leafnode->hashes[slot] = 0;
-					leafnode->keys[slot].clear();
-					auto leaf = leafnode->leaf;
-					transaction::run(pmpool, [&] {
-						leaf->slots[slot].get_rw().clear();
-					});
-					return status::OK; // no duplicate keys allowed
-				}
+
+	const auto hash = PearsonHash(key.data(), key.size());
+	for (int slot = LEAF_KEYS; slot--;) {
+		if (leafnode->hashes[slot] == hash) {
+			if (leafnode->keys[slot].compare(
+				    std::string(key.data(), key.size())) == 0) {
+				LOG("   freeing slot=" << slot);
+				leafnode->hashes[slot] = 0;
+				leafnode->keys[slot].clear();
+				auto leaf = leafnode->leaf;
+				transaction::run(pmpool, [&] {
+					leaf->slots[slot].get_rw().clear();
+				});
+				return status::OK; // no duplicate keys allowed
 			}
 		}
-		return status::NOT_FOUND;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
 	}
+	return status::NOT_FOUND;
 }
 
 // ===============================================================================================
 // PROTECTED LEAF METHODS
 // ===============================================================================================
 
-KVLeafNode *tree3::LeafSearch(const std::string &key)
+internal::tree3::KVLeafNode *tree3::LeafSearch(const std::string &key)
 {
-	KVNode *node = tree_top.get();
+	internal::tree3::KVNode *node = tree_top.get();
 	if (node == nullptr)
 		return nullptr;
 	bool matched;
 	while (!node->is_leaf) {
 		matched = false;
-		auto inner = (KVInnerNode *)node;
+		auto inner = (internal::tree3::KVInnerNode *)node;
 #ifndef NDEBUG
 		inner->assert_invariants();
 #endif
@@ -302,10 +256,10 @@ KVLeafNode *tree3::LeafSearch(const std::string &key)
 		if (!matched)
 			node = inner->children[keycount].get();
 	}
-	return (KVLeafNode *)node;
+	return (internal::tree3::KVLeafNode *)node;
 }
 
-void tree3::LeafFillEmptySlot(KVLeafNode *leafnode, const uint8_t hash,
+void tree3::LeafFillEmptySlot(internal::tree3::KVLeafNode *leafnode, const uint8_t hash,
 			      const std::string &key, const std::string &value)
 {
 	for (int slot = LEAF_KEYS; slot--;) {
@@ -316,7 +270,7 @@ void tree3::LeafFillEmptySlot(KVLeafNode *leafnode, const uint8_t hash,
 	}
 }
 
-bool tree3::LeafFillSlotForKey(KVLeafNode *leafnode, const uint8_t hash,
+bool tree3::LeafFillSlotForKey(internal::tree3::KVLeafNode *leafnode, const uint8_t hash,
 			       const std::string &key, const std::string &value)
 {
 	// scan for empty/matching slots
@@ -345,16 +299,16 @@ bool tree3::LeafFillSlotForKey(KVLeafNode *leafnode, const uint8_t hash,
 	return slot >= 0;
 }
 
-void tree3::LeafFillSpecificSlot(KVLeafNode *leafnode, const uint8_t hash,
-				 const std::string &key, const std::string &value,
-				 const int slot)
+void tree3::LeafFillSpecificSlot(internal::tree3::KVLeafNode *leafnode,
+				 const uint8_t hash, const std::string &key,
+				 const std::string &value, const int slot)
 {
 	leafnode->leaf->slots[slot].get_rw().set(hash, key, value);
 	leafnode->hashes[slot] = hash;
 	leafnode->keys[slot] = key;
 }
 
-void tree3::LeafSplitFull(KVLeafNode *leafnode, const uint8_t hash,
+void tree3::LeafSplitFull(internal::tree3::KVLeafNode *leafnode, const uint8_t hash,
 			  const std::string &key, const std::string &value)
 {
 	std::string keys[LEAF_KEYS + 1];
@@ -369,20 +323,22 @@ void tree3::LeafSplitFull(KVLeafNode *leafnode, const uint8_t hash,
 	LOG("   splitting leaf at key=" << split_key);
 
 	// split leaf into two leaves, moving slots that sort above split key to new leaf
-	unique_ptr<KVLeafNode> new_leafnode(new KVLeafNode());
+	unique_ptr<internal::tree3::KVLeafNode> new_leafnode(
+		new internal::tree3::KVLeafNode());
 	new_leafnode->parent = leafnode->parent;
 	new_leafnode->is_leaf = true;
 	transaction::run(pmpool, [&] {
-		persistent_ptr<KVLeaf> new_leaf;
+		persistent_ptr<internal::tree3::KVLeaf> new_leaf;
 		if (!leaves_prealloc.empty()) {
 			new_leaf = leaves_prealloc.back();
 			new_leafnode->leaf = new_leaf;
 			leaves_prealloc.pop_back();
 		} else {
-			auto root = pmpool.root();
-			auto old_head = root->head;
-			new_leaf = make_persistent<KVLeaf>();
-			root->head = new_leaf;
+			auto old_head =
+				persistent_ptr<internal::tree3::KVLeaf>(*root_oid);
+			new_leaf = make_persistent<internal::tree3::KVLeaf>();
+			transaction::snapshot(root_oid);
+			*root_oid = new_leaf.raw();
 			new_leaf->next = old_head;
 			new_leafnode->leaf = new_leaf;
 		}
@@ -403,13 +359,15 @@ void tree3::LeafSplitFull(KVLeafNode *leafnode, const uint8_t hash,
 	InnerUpdateAfterSplit(leafnode, move(new_leafnode), &split_key);
 }
 
-void tree3::InnerUpdateAfterSplit(KVNode *node, unique_ptr<KVNode> new_node,
+void tree3::InnerUpdateAfterSplit(internal::tree3::KVNode *node,
+				  unique_ptr<internal::tree3::KVNode> new_node,
 				  std::string *split_key)
 {
 	if (!node->parent) {
 		assert(node == tree_top.get());
 		LOG("   creating new top node for split_key=" << *split_key);
-		unique_ptr<KVInnerNode> top(new KVInnerNode());
+		unique_ptr<internal::tree3::KVInnerNode> top(
+			new internal::tree3::KVInnerNode());
 		top->keycount = 1;
 		top->keys[0] = *split_key;
 		node->parent = top.get();
@@ -424,7 +382,7 @@ void tree3::InnerUpdateAfterSplit(KVNode *node, unique_ptr<KVNode> new_node,
 	}
 
 	LOG("   updating parents for split_key=" << *split_key);
-	KVInnerNode *inner = node->parent;
+	internal::tree3::KVInnerNode *inner = node->parent;
 	{ // insert split_key and new_node into inner node in sorted order
 		const uint8_t keycount = inner->keycount;
 		int idx = 0; // position where split_key should be inserted
@@ -447,7 +405,8 @@ void tree3::InnerUpdateAfterSplit(KVNode *node, unique_ptr<KVNode> new_node,
 	}
 
 	// split inner node at the midpoint, update parents as needed
-	unique_ptr<KVInnerNode> ni(new KVInnerNode());      // create new inner node
+	unique_ptr<internal::tree3::KVInnerNode> ni(
+		new internal::tree3::KVInnerNode());	// create new inner node
 	ni->parent = inner->parent;			    // set parent reference
 	for (int i = INNER_KEYS_UPPER; i < keycount; i++) { // move all upper keys
 		ni->keys[i - INNER_KEYS_UPPER] = move(inner->keys[i]); // move key string
@@ -481,18 +440,21 @@ void tree3::Recover()
 	LOG("Recovering");
 
 	// traverse persistent leaves to build list of leaves to recover
-	std::list<KVRecoveredLeaf> leaves;
-	auto leaf = pmpool.root()->head;
-	while (leaf) {
-		unique_ptr<KVLeafNode> leafnode(new KVLeafNode());
-		leafnode->leaf = leaf;
+	std::list<internal::tree3::KVRecoveredLeaf> leaves;
+
+	auto root_leaf = persistent_ptr<internal::tree3::KVLeaf>(*root_oid);
+
+	while (root_leaf) {
+		unique_ptr<internal::tree3::KVLeafNode> leafnode(
+			new internal::tree3::KVLeafNode());
+		leafnode->leaf = root_leaf;
 		leafnode->is_leaf = true;
 
 		// find highest sorting key in leaf, while recovering all hashes
 		bool empty_leaf = true;
 		std::string max_key;
 		for (int slot = LEAF_KEYS; slot--;) {
-			auto kvslot = leaf->slots[slot].get_ro();
+			auto kvslot = root_leaf->slots[slot].get_ro();
 			if (kvslot.empty())
 				continue;
 			leafnode->hashes[slot] = kvslot.hash();
@@ -511,16 +473,17 @@ void tree3::Recover()
 
 		// use highest sorting key to decide how to recover the leaf
 		if (empty_leaf) {
-			leaves_prealloc.push_back(leaf);
+			leaves_prealloc.push_back(root_leaf);
 		} else {
 			leaves.push_back({move(leafnode), max_key});
 		}
 
-		leaf = leaf->next; // advance to next linked leaf
+		root_leaf = root_leaf->next.get(); // advance to next linked leaf
 	}
 
 	// sort recovered leaves in ascending key order
-	leaves.sort([](const KVRecoveredLeaf &lhs, const KVRecoveredLeaf &rhs) {
+	leaves.sort([](const internal::tree3::KVRecoveredLeaf &lhs,
+		       const internal::tree3::KVRecoveredLeaf &rhs) {
 		return (lhs.max_key.compare(rhs.max_key) < 0);
 	});
 
@@ -587,7 +550,7 @@ uint8_t tree3::PearsonHash(const char *data, const size_t size)
 // SLOT CLASS METHODS
 // ===============================================================================================
 
-bool KVSlot::empty()
+bool internal::tree3::KVSlot::empty()
 {
 	if (kv)
 		return false;
@@ -595,7 +558,7 @@ bool KVSlot::empty()
 		return true;
 }
 
-void KVSlot::clear()
+void internal::tree3::KVSlot::clear()
 {
 	if (kv) {
 		char *p = kv.get();
@@ -610,7 +573,8 @@ void KVSlot::clear()
 	}
 }
 
-void KVSlot::set(const uint8_t hash, const std::string &key, const std::string &value)
+void internal::tree3::KVSlot::set(const uint8_t hash, const std::string &key,
+				  const std::string &value)
 {
 	if (kv) {
 		char *p = kv.get();
@@ -640,7 +604,7 @@ void KVSlot::set(const uint8_t hash, const std::string &key, const std::string &
 // Node invariants
 // ===============================================================================================
 
-void KVInnerNode::assert_invariants()
+void internal::tree3::KVInnerNode::assert_invariants()
 {
 	assert(keycount <= INNER_KEYS);
 	for (auto i = 0; i < keycount; ++i) {

@@ -37,15 +37,118 @@
 
 set -e
 
-# all of the dependencies (gems) needed to run pmemkv-ruby will be saved in
-# /opt/bindings/ruby directory
+# 03.10.2019; contains libpmemobj new (non-experimental) namespace for containers
+PMEMKV_VERSION=7bb72710c3a24e17b52e49bac64abfbaf15d138c
+
+# Merge pull request #36 from ldorau/Replace-PMEMKV_STATUS_FAILED-with-PMEMKV_STATUS_UNKNOWN_ERROR, 18.09.2019
+RUBY_VERSION=99d1bfc05d116d35d0e96541ece9b9df831d95a0
+
+# Merge pull request #29 from ldorau/Replace-PMEMKV_STATUS_FAILED-with-PMEMKV_STATUS_UNKNOWN_ERROR, 18.09.2019
+JNI_VERSION=78b81de8266ec690fb41b5f4e62948e200640cbe
+
+# Merge pull request #26 from ldorau/Update-gitignore, 16.09.2019
+JAVA_VERSION=30c2a897574aa2552bd3e651e4e57f2469da5767
+
+# Merge pull request #38 from lukaszstolarczuk/replace-json-config, 01.10.2019
+NODEJS_VERSION=9e3f0edd8f10d0d6f011fd22354ce1b4efe36f84
+
+PREFIX=/usr
+rm -rf /opt/bindings
+
+WORKDIR=$(pwd)
+
+#
+# 1) Build and install PMEMKV - Java will need it
+#
+git clone https://github.com/pmem/pmemkv.git
+cd pmemkv
+git checkout $PMEMKV_VERSION
+cp /opt/googletest/googletest-*.zip .
+mkdir build
+cd build
+# only VSMAP engine is enabled, because Java tests need it
+
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	-DCMAKE_INSTALL_PREFIX=$PREFIX \
+	-DENGINE_VSMAP=ON \
+	-DENGINE_CMAP=OFF \
+	-DENGINE_VCMAP=OFF \
+	-DENGINE_CACHING=OFF \
+	-DENGINE_STREE=OFF \
+	-DBUILD_EXAMPLES=OFF \
+	-DENGINE_TREE3=OFF
+make -j2
+make -j2 install
+
+#
+# 2) RUBY dependencies - all of the dependencies (gems) needed to run
+#                        pmemkv-ruby will be saved
+#                        in the /opt/bindings/ruby directory
+cd $WORKDIR
 mkdir -p /opt/bindings/ruby/
-sudo gem install bundler -v '< 2.0'
+gem install bundler -v '< 2.0'
 git clone https://github.com/pmem/pmemkv-ruby.git
 cd pmemkv-ruby
-# bundle package command copies all of the .gem files needed to run the application
-# into the vendor/cache directory
-sudo bundle package
+git checkout $RUBY_VERSION
+# bundle package command copies all of the .gem files needed to run
+# the application into the vendor/cache directory
+bundle package
 mv -v vendor/cache/* /opt/bindings/ruby/
-cd ..
-rm -rf pmemkv-ruby
+
+#
+# 3) Build and install JNI
+#
+cd $WORKDIR
+git clone https://github.com/pmem/pmemkv-jni.git
+cd pmemkv-jni
+git checkout $JNI_VERSION
+cp /opt/googletest/googletest-*.zip .
+make
+make install prefix=$PREFIX
+
+#
+# 4) JAVA dependencies - all of the dependencies needed to run
+#                        pmemkv-java will be saved
+#                        in the /opt/bindings/java directory
+cd $WORKDIR
+mkdir -p /opt/bindings/java/
+export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+export JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8
+
+git clone https://github.com/pmem/pmemkv-java.git
+cd pmemkv-java
+git checkout $JAVA_VERSION
+mvn dependency:go-offline
+mvn install
+mv -v ~/.m2/repository /opt/bindings/java/
+
+#
+# 5) NodeJS dependencies - all of the dependencies needed to run
+#                          pmemkv-nodejs will be saved
+#                          in the /opt/bindings/nodejs/ directory
+cd $WORKDIR
+mkdir -p /opt/bindings/nodejs/
+git clone https://github.com/pmem/pmemkv-nodejs.git
+cd pmemkv-nodejs
+git checkout $NODEJS_VERSION
+npm install --save
+cp -rv ./node_modules /opt/bindings/nodejs/
+
+#
+# Uninstall all installed stuff
+#
+cd $WORKDIR/pmemkv/build
+make uninstall
+
+cd $WORKDIR/pmemkv-jni
+make uninstall
+
+cd $WORKDIR/pmemkv-nodejs
+npm uninstall
+
+cd $WORKDIR
+rm -r pmemkv pmemkv-ruby pmemkv-jni pmemkv-java pmemkv-nodejs
+
+
+# make the /opt/bindings directory world-readable
+chmod -R a+r /opt/bindings

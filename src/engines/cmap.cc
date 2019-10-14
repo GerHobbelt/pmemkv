@@ -35,55 +35,19 @@
 
 #include <unistd.h>
 
-#define DO_LOG 0
-#define LOG(msg)                                                                         \
-	do {                                                                             \
-		if (DO_LOG)                                                              \
-			std::cout << "[cmap] " << msg << "\n";                           \
-	} while (0)
-
 namespace pmem
 {
 namespace kv
 {
 
-cmap::cmap(std::unique_ptr<internal::config> cfg)
+cmap::cmap(std::unique_ptr<internal::config> cfg) : pmemobj_engine_base(cfg)
 {
-	const char *path;
-	std::size_t size;
-
-	if (cfg->get_string("path", &path) != status::OK)
-		throw std::runtime_error("Config does not contain path");
-
-	uint64_t force_create;
-	auto ret = cfg->get_uint64("force_create", &force_create);
-
-	if (ret == status::NOT_FOUND)
-		force_create = 0;
-	else if (ret != status::OK)
-		throw std::runtime_error("Cannot get force_create from config");
-
-	if (force_create) {
-		if (cfg->get_uint64("size", &size) != status::OK)
-			throw std::runtime_error("Config does not contain size");
-
-		LOG("Creating filesystem pool, path=" << path << ", size="
-						      << std::to_string(size));
-		pmpool = pool_t::create(path, LAYOUT, size, S_IRWXU);
-	} else {
-		LOG("Opening pool, path=" << path);
-		pmpool = pool_t::open(path, LAYOUT);
-	}
-
 	LOG("Started ok");
-
 	Recover();
 }
 
 cmap::~cmap()
 {
-	LOG("Stopping");
-	pmpool.close();
 	LOG("Stopped ok");
 }
 
@@ -95,6 +59,7 @@ std::string cmap::name()
 status cmap::count_all(std::size_t &cnt)
 {
 	LOG("count_all");
+	check_outside_tx();
 	cnt = container->size();
 
 	return status::OK;
@@ -103,6 +68,7 @@ status cmap::count_all(std::size_t &cnt)
 status cmap::get_all(get_kv_callback *callback, void *arg)
 {
 	LOG("get_all");
+	check_outside_tx();
 	for (auto it = container->begin(); it != container->end(); ++it) {
 		auto ret = callback(it->first.c_str(), it->first.size(),
 				    it->second.c_str(), it->second.size(), arg);
@@ -117,13 +83,15 @@ status cmap::get_all(get_kv_callback *callback, void *arg)
 status cmap::exists(string_view key)
 {
 	LOG("exists for key=" << std::string(key.data(), key.size()));
+	check_outside_tx();
 	return container->count(key) == 1 ? status::OK : status::NOT_FOUND;
 }
 
 status cmap::get(string_view key, get_v_callback *callback, void *arg)
 {
 	LOG("get key=" << std::string(key.data(), key.size()));
-	map_t::const_accessor result;
+	check_outside_tx();
+	internal::cmap::map_t::const_accessor result;
 	bool found = container->find(result, key);
 	if (!found) {
 		LOG("  key not found");
@@ -138,22 +106,18 @@ status cmap::put(string_view key, string_view value)
 {
 	LOG("put key=" << std::string(key.data(), key.size())
 		       << ", value.size=" << std::to_string(value.size()));
-	try {
-		map_t::accessor acc;
-		// XXX - do not create temporary string
-		bool result = container->insert(
-			acc, map_t::value_type(string_t(key), string_t(value)));
-		if (!result) {
-			pmem::obj::transaction::manual tx(pmpool);
-			acc->second = value;
-			pmem::obj::transaction::commit();
-		}
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
+	check_outside_tx();
+
+	internal::cmap::map_t::accessor acc;
+	// XXX - do not create temporary string
+	bool result = container->insert(
+		acc,
+		internal::cmap::map_t::value_type(internal::cmap::string_t(key),
+						  internal::cmap::string_t(value)));
+	if (!result) {
+		pmem::obj::transaction::manual tx(pmpool);
+		acc->second = value;
+		pmem::obj::transaction::commit();
 	}
 
 	return status::OK;
@@ -162,27 +126,24 @@ status cmap::put(string_view key, string_view value)
 status cmap::remove(string_view key)
 {
 	LOG("remove key=" << std::string(key.data(), key.size()));
-	try {
-		bool erased = container->erase(key);
-		return erased ? status::OK : status::NOT_FOUND;
-	} catch (std::runtime_error e) {
-		ERR() << "Remove failed due to exception, " << e.what();
-		return status::FAILED;
-	}
+	check_outside_tx();
+
+	bool erased = container->erase(key);
+	return erased ? status::OK : status::NOT_FOUND;
 }
 
 void cmap::Recover()
 {
-	auto root_data = pmpool.root();
-	if (root_data->map_ptr) {
-		container = root_data->map_ptr.get();
-		container->initialize();
+	if (!OID_IS_NULL(*root_oid)) {
+		container = (pmem::kv::internal::cmap::map_t *)pmemobj_direct(*root_oid);
+		container->runtime_initialize();
 	} else {
 		pmem::obj::transaction::manual tx(pmpool);
-		root_data->map_ptr = pmem::obj::make_persistent<map_t>();
+		pmem::obj::transaction::snapshot(root_oid);
+		*root_oid = pmem::obj::make_persistent<internal::cmap::map_t>().raw();
 		pmem::obj::transaction::commit();
-		container = root_data->map_ptr.get();
-		container->initialize(true);
+		container = (pmem::kv::internal::cmap::map_t *)pmemobj_direct(*root_oid);
+		container->runtime_initialize(true);
 	}
 }
 

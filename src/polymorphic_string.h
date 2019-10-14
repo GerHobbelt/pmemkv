@@ -32,7 +32,7 @@
 
 #pragma once
 
-#include <libpmemobj++/experimental/string.hpp>
+#include <libpmemobj++/container/string.hpp>
 #include <libpmemobj++/p.hpp>
 #include <string>
 
@@ -44,7 +44,7 @@ namespace kv
 {
 class polymorphic_string {
 public:
-	using pmem_string = pmem::obj::experimental::string;
+	using pmem_string = pmem::obj::string;
 	polymorphic_string()
 	{
 		construct();
@@ -157,17 +157,17 @@ public:
 
 	bool operator==(const polymorphic_string &rhs) const
 	{
-		return compare(0, size(), rhs.c_str(), rhs.size()) == 0;
+		return compare(0U, size(), rhs.c_str(), rhs.size()) == 0;
 	}
 
 	bool operator==(string_view rhs) const
 	{
-		return compare(0, size(), rhs.data(), rhs.size()) == 0;
+		return compare(0U, size(), rhs.data(), rhs.size()) == 0;
 	}
 
 	bool operator==(const std::string &rhs) const
 	{
-		return compare(0, size(), rhs.c_str(), rhs.size()) == 0;
+		return compare(0U, size(), rhs.c_str(), rhs.size()) == 0;
 	}
 
 	template <typename... Args>

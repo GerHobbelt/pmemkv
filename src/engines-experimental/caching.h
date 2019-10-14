@@ -41,8 +41,6 @@ namespace kv
 
 class db;
 
-static int64_t ttl; // todo move into private field
-
 class caching : public engine_base {
 public:
 	caching(std::unique_ptr<internal::config> cfg);
@@ -63,27 +61,22 @@ public:
 	status remove(string_view key) final;
 
 private:
-	bool getString(internal::config &cfg, const char *key, std::string &str);
-	bool readConfig(internal::config &cfg);
+	void getString(internal::config &cfg, const char *key, std::string &str);
 	bool getFromRemoteRedis(const std::string &key, std::string &value);
 	bool getFromRemoteMemcached(const std::string &key, std::string &value);
 	bool getKey(const std::string &key, std::string &valueField, bool api_flag);
 
+	std::unique_ptr<engine_base> basePtr;
+
 	int64_t attempts;
-	db *basePtr;
 	std::string host;
 	int64_t port;
 	std::string remoteType;
 	std::string remoteUser;
 	std::string remotePasswd;
 	std::string remoteUrl;
-	std::string subEngine;
-	pmemkv_config *subEngineConfig;
+	int64_t ttl;
 };
-
-time_t convertTimeToEpoch(const char *theTime, const char *format = "%Y%m%d%H%M%S");
-std::string getTimeStamp(time_t epochTime, const char *format = "%Y%m%d%H%M%S");
-bool valueFieldConversion(std::string dateValue);
 
 } /* namespace kv */
 } /* namespace pmem */

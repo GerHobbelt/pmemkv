@@ -36,13 +36,6 @@
 
 #include <iostream>
 
-#define DO_LOG 0
-#define LOG(msg)                                                                         \
-	do {                                                                             \
-		if (DO_LOG)                                                              \
-			std::cout << "[vcmap] " << msg << "\n";                          \
-	} while (0)
-
 namespace pmem
 {
 namespace kv
@@ -51,8 +44,9 @@ namespace kv
 static std::string get_path(internal::config &cfg)
 {
 	const char *path;
-	if (cfg.get_string("path", &path) != status::OK)
-		throw std::runtime_error("Config does not contain path");
+	if (!cfg.get_string("path", &path))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"path\"");
 
 	return std::string(path);
 }
@@ -60,8 +54,9 @@ static std::string get_path(internal::config &cfg)
 static uint64_t get_size(internal::config &cfg)
 {
 	std::size_t size;
-	if (cfg.get_uint64("size", &size) != status::OK)
-		throw std::runtime_error("Config does not contain size");
+	if (!cfg.get_uint64("size", &size))
+		throw internal::invalid_argument(
+			"Config does not contain item with key: \"size\"");
 
 	return size;
 }
@@ -136,48 +131,27 @@ status vcmap::put(string_view key, string_view value)
 {
 	LOG("put key=" << std::string(key.data(), key.size())
 		       << ", value.size=" << std::to_string(value.size()));
-	try {
-		map_t::value_type kv_pair{
-			// XXX - do not create temporary string
-			pmem_string(key.data(), key.size(), ch_allocator),
-			pmem_string(value.data(), value.size(), ch_allocator)};
-		bool result = pmem_kv_container.insert(kv_pair);
-		if (!result) {
-			map_t::accessor result_found;
-			pmem_kv_container.find(result_found, kv_pair.first);
-			result_found->second = kv_pair.second;
-		}
-		return status::OK;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
+
+	map_t::value_type kv_pair{// XXX - do not create temporary string
+				  pmem_string(key.data(), key.size(), ch_allocator),
+				  pmem_string(value.data(), value.size(), ch_allocator)};
+	bool result = pmem_kv_container.insert(kv_pair);
+	if (!result) {
+		map_t::accessor result_found;
+		pmem_kv_container.find(result_found, kv_pair.first);
+		result_found->second = kv_pair.second;
 	}
+	return status::OK;
 }
 
 status vcmap::remove(string_view key)
 {
 	LOG("remove key=" << std::string(key.data(), key.size()));
-	try {
-		// XXX - do not create temporary string
-		size_t erased = pmem_kv_container.erase(
-			pmem_string(key.data(), key.size(), ch_allocator));
-		return (erased == 1) ? status::OK : status::NOT_FOUND;
-	} catch (std::bad_alloc e) {
-		ERR() << "Put failed due to exception, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_alloc_error e) {
-		ERR() << "Put failed due to pmem::transaction_alloc_error, " << e.what();
-		return status::FAILED;
-	} catch (pmem::transaction_error e) {
-		ERR() << "Put failed due to pmem::transaction_error, " << e.what();
-		return status::FAILED;
-	}
+
+	// XXX - do not create temporary string
+	size_t erased = pmem_kv_container.erase(
+		pmem_string(key.data(), key.size(), ch_allocator));
+	return (erased == 1) ? status::OK : status::NOT_FOUND;
 }
 
 } // namespace kv

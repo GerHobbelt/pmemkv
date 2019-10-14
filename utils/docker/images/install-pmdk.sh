@@ -36,19 +36,20 @@
 
 set -e
 
-git clone https://github.com/pmem/pmdk
+git clone https://github.com/pmem/pmdk --shallow-since=2019-09-26
 cd pmdk
-# stable-1.6
-git checkout 695e6eba28c53a69a0ef7bad3cc0f45c21ef3e00 
+git checkout 1.7
 
 make BUILD_PACKAGE_CHECK=n $1
 if [ "$1" = "dpkg" ]; then
       sudo dpkg -i dpkg/libpmem_*.deb dpkg/libpmem-dev_*.deb
       sudo dpkg -i dpkg/libpmemobj_*.deb dpkg/libpmemobj-dev_*.deb
+      sudo dpkg -i dpkg/pmreorder_*.deb
 elif [ "$1" = "rpm" ]; then
       sudo rpm -i rpm/*/pmdk-debuginfo-*.rpm
       sudo rpm -i rpm/*/libpmem-*.rpm
       sudo rpm -i rpm/*/libpmemobj-*.rpm
+      sudo rpm -i rpm/*/pmreorder-*.rpm
 fi
 
 cd ..

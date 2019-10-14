@@ -29,7 +29,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(pmemkv)
 
 include(cmake/helpers.cmake)
@@ -48,7 +48,9 @@ if(NOT CMAKE_BUILD_TYPE)
 		CACHE STRING "Choose a type of build (Debug, Release or RelWithDebInfo)" FORCE)
 endif()
 
+option(BUILD_DOC "build documentation" ON)
 option(BUILD_EXAMPLES "build examples" ON)
+option(BUILD_JSON_CONFIG "build the 'libpmemkv_json_config' library" ON)
 
 option(COVERAGE "run coverage test" OFF)
 if(COVERAGE)
@@ -57,47 +59,66 @@ endif()
 
 # Each engine can be enabled separately.
 # By default all experimental engines are turned off.
-option(ENGINE_VSMAP "enable vsmap engine" ON)
-option(ENGINE_VCMAP "enable vcmap engine" ON)
 option(ENGINE_CMAP "enable cmap engine" ON)
+option(ENGINE_VCMAP "enable vcmap engine" ON)
+option(ENGINE_VSMAP "enable vsmap engine" ON)
 option(ENGINE_CACHING "enable experimental caching engine" OFF)
 option(ENGINE_STREE "enable experimental stree engine" OFF)
 option(ENGINE_TREE3 "enable experimental tree3 engine" OFF)
 
 option(DEVELOPER_MODE "enable developer's checks" OFF)
 
-if(ENGINE_VSMAP)
-	add_definitions(-DENGINE_VSMAP)
+if(ENGINE_CMAP)
+	add_definitions(-DENGINE_CMAP)
+	message(STATUS "CMAP engine is ON")
+else()
+	message(STATUS "CMAP engine is OFF")
 endif()
 if(ENGINE_VCMAP)
 	add_definitions(-DENGINE_VCMAP)
+	message(STATUS "VCMAP engine is ON")
+else()
+	message(STATUS "VCMAP engine is OFF")
 endif()
-if(ENGINE_CMAP)
-	add_definitions(-DENGINE_CMAP)
+if(ENGINE_VSMAP)
+	add_definitions(-DENGINE_VSMAP)
+	message(STATUS "VSMAP engine is ON")
+else()
+	message(STATUS "VSMAP engine is OFF")
 endif()
 if(ENGINE_CACHING)
 	add_definitions(-DENGINE_CACHING)
+	message(STATUS "CACHING engine is ON")
+else()
+	message(STATUS "CACHING engine is OFF")
 endif()
 if(ENGINE_STREE)
 	add_definitions(-DENGINE_STREE)
+	message(STATUS "STREE engine is ON")
+else()
+	message(STATUS "STREE engine is OFF")
 endif()
 if(ENGINE_TREE3)
 	add_definitions(-DENGINE_TREE3)
+	message(STATUS "TREE3 engine is ON")
+else()
+	message(STATUS "TREE3 engine is OFF")
 endif()
 
 set(SOURCE_FILES
 	src/libpmemkv.cc
 	src/libpmemkv.h
+	src/engine.cc
 	src/engines/blackhole.cc
 	src/engines/blackhole.h
 	src/out.cc
 	src/out.h
 )
 # Add each engine source separately
-if(ENGINE_VSMAP)
+if(ENGINE_CMAP)
 	list(APPEND SOURCE_FILES
-		src/engines/vsmap.h
-		src/engines/vsmap.cc
+		src/engines/cmap.h
+		src/engines/cmap.cc
 	)
 endif()
 if(ENGINE_VCMAP)
@@ -106,10 +127,10 @@ if(ENGINE_VCMAP)
 		src/engines/vcmap.cc
 	)
 endif()
-if(ENGINE_CMAP)
+if(ENGINE_VSMAP)
 	list(APPEND SOURCE_FILES
-		src/engines/cmap.h
-		src/engines/cmap.cc
+		src/engines/vsmap.h
+		src/engines/vsmap.cc
 	)
 endif()
 if(ENGINE_CACHING)
@@ -140,8 +161,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD ${CXX_STANDARD})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
-set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.7)
-set(LIBPMEMOBJ_REQUIRED_VERSION 1.6)
+set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.8)
+set(LIBPMEMOBJ_REQUIRED_VERSION 1.7)
+
+add_common_flag(-Wall)
+add_common_flag(-Werror)
+add_common_flag(-Wpointer-arith)
+add_common_flag(-Wsign-compare)
+add_common_flag(-Wunreachable-code-return)
+add_common_flag(-Wmissing-variable-declarations)
+add_common_flag(-fno-common)
+add_common_flag(-Wunused-macros)
+add_common_flag(-Wsign-conversion)
+
+add_common_flag(-ggdb DEBUG)
+add_common_flag(-DDEBUG DEBUG)
+
+add_common_flag("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" RELEASE)
 
 find_package(PkgConfig QUIET)
 include(FindPerl)
@@ -150,8 +186,7 @@ include(FindThreads)
 include(CheckCXXSourceCompiles)
 include(GNUInstallDirs)
 
-include(rapidjson)
-set(PKG_CONFIG_REQUIRES RapidJSON)
+set(PKG_CONFIG_REQUIRES)
 set(DEB_DEPENDS)
 set(RPM_DEPENDS)
 
@@ -253,6 +288,18 @@ if(VALGRIND_FOUND)
 
 	if(NOT VALGRIND_PMEMCHECK_FOUND)
 		message(WARNING "Valgrind pmemcheck not found. Some tests will be skipped.")
+	elseif((NOT(PMEMCHECK_VERSION LESS 1.0)) AND PMEMCHECK_VERSION LESS 2.0)
+		message(STATUS "Pmemcheck ${PMEMCHECK_VERSION} found")
+		find_program(PMREORDER names pmreorder HINTS ${CMAKE_INSTALL_PREFIX}/bin)
+		if(PMREORDER)
+			message(STATUS "Pmreorder found")
+			set(ENV{PATH} ${CMAKE_INSTALL_PREFIX}/bin:$ENV{PATH})
+			set(PMREORDER_SUPPORTED true CACHE INTERNAL "pmreorder support")
+		endif()
+	else()
+		message(WARNING "Pmreorder will not be used and some tests will be skipped. "
+				"Pmemcheck must be installed in version 1.x "
+				"(currently installed version is ${PMEMCHECK_VERSION})")
 	endif()
 else()
 	message(WARNING "Valgrind not found. Some tests will be skipped.")
@@ -263,7 +310,6 @@ set_target_properties(pmemkv PROPERTIES SOVERSION 0)
 target_link_libraries(pmemkv PRIVATE
 	-Wl,--version-script=${CMAKE_SOURCE_DIR}/src/libpmemkv.map)
 
-target_link_libraries(pmemkv PRIVATE ${RapidJSON_LIBRARIES})
 if(ENGINE_VSMAP OR ENGINE_VCMAP OR ENGINE_CMAP OR ENGINE_STREE OR ENGINE_TREE3)
 	target_link_libraries(pmemkv PRIVATE ${LIBPMEMOBJ++_LIBRARIES})
 endif()
@@ -291,10 +337,7 @@ install(FILES ${CMAKE_BINARY_DIR}/libpmemkv.pc
 
 set_target_properties(pmemkv PROPERTIES PUBLIC_HEADER "src/libpmemkv.h;src/libpmemkv.hpp")
 
-find_program(PANDOC NAMES pandoc)
-if(NOT PANDOC)
-	message(WARNING "pandoc not found - documentation will not be generated")
-else()
+if(BUILD_DOC)
 	add_subdirectory(doc)
 endif()
 
@@ -302,6 +345,34 @@ install(TARGETS pmemkv
 		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+if(BUILD_JSON_CONFIG)
+	include(rapidjson)
+	add_definitions(-DBUILD_JSON_CONFIG)
+
+	set(SOURCE_FILES_JSON_CONFIG
+		src/libpmemkv_json_config.cc
+		src/libpmemkv_json_config.h
+		src/out.cc
+		src/out.h
+	)
+
+	add_library(pmemkv_json_config SHARED ${SOURCE_FILES_JSON_CONFIG})
+	target_link_libraries(pmemkv_json_config PRIVATE pmemkv ${RapidJSON_LIBRARIES}
+		-Wl,--version-script=${CMAKE_SOURCE_DIR}/src/libpmemkv_json_config.map)
+	set_target_properties(pmemkv_json_config
+		PROPERTIES PUBLIC_HEADER "src/libpmemkv_json_config.h")
+
+	configure_file(libpmemkv_json_config.pc.in libpmemkv_json_config.pc @ONLY)
+
+	install(FILES ${CMAKE_BINARY_DIR}/libpmemkv_json_config.pc
+		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+	install(TARGETS pmemkv_json_config
+		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 configure_file(
 	"${CMAKE_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"

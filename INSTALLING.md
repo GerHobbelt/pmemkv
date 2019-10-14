@@ -1,4 +1,5 @@
 # Installing pmemkv
+
 Key/Value Datastore for Persistent Memory
 
 *This is experimental pre-release software and should not be used in
@@ -6,37 +7,33 @@ production systems. APIs and file formats may change at any time without
 preserving backwards compatibility. All known issues and limitations
 are logged as GitHub issues.*
 
-Contents
---------
+## Contents
 
-<ul>
-<li><a href="#building_from_sources">Building from Sources</a></li>
-<li><a href="#fedora">Installing on Fedora</a></li>
-<li><a href="#ubuntu">Installing on Ubuntu</a></li>
-<li><a href="#experimental">Using Experimental Engines</a></li>
-<li><a href="#build_package">Building packages</a></li>
-<li><a href="#pool_set">Using a Pool Set</a></li>
-</ul>
+- [Building from Sources](#building-from-sources)
+- [Installing on Fedora](#installing-on-fedora)
+- [Installing on Ubuntu](#installing-on-ubuntu)
+- [Using Experimental Engines](#using-experimental-engines)
+- [Building packages](#building-packages)
+- [Using a Pool Set](#using-a-pool-set)
 
-<a name="building_from_sources"></a>
-
-Building from Sources
----------------------
+## Building from Sources
 
 **Prerequisites**
 
 * 64-bit Linux (OSX and Windows are not yet supported)
-* [PMDK](https://github.com/pmem/pmdk) - Persistent Memory Development Kit
-* [RapidJSON](https://github.com/tencent/rapidjson) - JSON parser
-* [libpmemobj-cpp](https://github.com/pmem/libpmemobj-cpp) - C++ bindings for PMDK (required by all engines except blackhole and caching)
+* [PMDK](https://github.com/pmem/pmdk) - Persistent Memory Development Kit 1.7
+* [libpmemobj-cpp](https://github.com/pmem/libpmemobj-cpp) - C++ bindings 1.8 for PMDK (required by all engines except blackhole and caching)
 * [TBB](https://github.com/01org/tbb) - Thread Building Blocks (requiered by cmap & vcmap engines)
 * [memkind](https://github.com/memkind/memkind) - Volatile memory manager (required by vsmap & vcmap engines)
+* [RapidJSON](https://github.com/tencent/rapidjson) - JSON parser (required by `libpmemkv_json_config` helper library)
 * Used only for development & testing:
 	* [pandoc](https://pandoc.org/) - markup converter to generate manpages
+	* [doxygen](http://www.doxygen.nl/) - tool for generating documentation from annotated C++ sources
+	* [graphviz](https://www.graphviz.org/) - graph visualization software required by _doxygen_
 	* [perl](https://www.perl.org/) - for whitespace checker script
 	* [clang format 8.0](https://clang.llvm.org/docs/ClangFormat.html) - to format and check coding style
 
-**Building and running tests**
+**Building pmemkv and running tests**
 
 ```sh
 git clone https://github.com/pmem/pmemkv
@@ -55,6 +52,20 @@ ctest --output-on-failure
 ```
 
 to see the output of failed tests.
+
+Building of the `libpmemkv_json_config` helper library is enabled by default.
+If you want to disable it (for example to get rid of the RapidJSON dependency)
+run:
+
+```sh
+cmake .. -DBUILD_JSON_CONFIG=OFF
+```
+
+instead of:
+
+```sh
+cmake ..
+```
 
 **Managing shared library**
 
@@ -88,10 +99,7 @@ make
 make test            # or 'ctest --output-on-failure'
 ```
 
-<a name="fedora"></a>
-
-Installing on Fedora
---------------------
+## Installing on Fedora
 
 Install required packages:
 
@@ -142,12 +150,9 @@ cd memkind
 su -c 'make install'
 ```
 
-Finally <a href="#building_from_sources">build and install pmemkv from sources</a>.
+Finally [build and install pmemkv from sources](#building-from-sources).
 
-<a name="ubuntu"></a>
-
-Installing on Ubuntu
---------------------
+## Installing on Ubuntu
 
 Install required packages:
 
@@ -197,12 +202,9 @@ cd memkind
 sudo make install
 ```
 
-Finally <a href="#building_from_sources">build and install pmemkv from sources</a>.
+Finally [build and install pmemkv from sources](#building-from-sources).
 
-<a name="experimental"></a>
-
-Using Experimental Engines
---------------------------
+## Using Experimental Engines
 
 To enable experimental engine(s) use adequate CMake parameter, e.g.:
 
@@ -246,10 +248,8 @@ cd ../lib_protocol
 make
 ```
 
-<a name="build_package"></a>
+## Building packages
 
-Building packages
------------------
 ```sh
 ...
 cmake .. -DCPACK_GENERATOR="$GEN" -DCMAKE_INSTALL_PREFIX=/usr
@@ -260,10 +260,7 @@ $GEN is a type of package generator and can be RPM or DEB
 
 CMAKE_INSTALL_PREFIX must be set to a destination where packages will be installed
 
-<a name="pool_set"></a>
-
-Using a Pool Set
-----------------
+## Using a Pool Set
 
 First create a pool set descriptor:  (`~/pmemkv.poolset` in this example)
 

@@ -8,9 +8,9 @@ gcc -Wall "$SRC/examples/pmemkv_basic_c/pmemkv_basic.c" -lpmemkv
 
 ./a.out foo | tee log
 
-diff -u log - <<END
+diff -u - log <<END
 Creating config
-Starting engine
+Opening pmemkv database with 'cmap' engine
 Putting new key
 Reading key back
 Iterating existing keys
@@ -18,5 +18,5 @@ Iterating existing keys
    visited: key2
    visited: key1
 Removing existing key
-Stopping engine
+Closing database
 END

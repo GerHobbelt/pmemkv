@@ -4,7 +4,7 @@ set -e
 SRC=$(pwd)
 cd "$AUTOPKGTEST_TMP"
 
-gcc -Wall -lpmemkv "$SRC/examples/pmemkv_basic_c/pmemkv_basic.c"
+gcc -Wall "$SRC/examples/pmemkv_basic_c/pmemkv_basic.c" -lpmemkv
 
 ./a.out foo | tee log
 

@@ -1,3 +1,12 @@
+pmemkv (1.0.1~rc1-1) experimental; urgency=medium
+
+  * New upstream pre-release.
+  * Update soname to 1.
+  * Fix autopkgtests wrt --as-needed.
+  * Bump B-Dep versions of obj and cpp.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Wed, 23 Oct 2019 14:16:49 +0200
+
 pmemkv (0.8-1) experimental; urgency=medium
 
   * Initial release (Closes: #931240)

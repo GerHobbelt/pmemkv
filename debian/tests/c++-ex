@@ -8,7 +8,7 @@ g++ -Wall "$SRC/examples/pmemkv_basic_cpp/pmemkv_basic.cpp" -lpmemkv
 
 ./a.out foo | tee log
 
-diff log - <<END
+diff -u log - <<END
 Creating config
 Starting engine
 Putting new key

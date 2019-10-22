@@ -8,7 +8,7 @@ gcc -Wall "$SRC/examples/pmemkv_basic_c/pmemkv_basic.c" -lpmemkv
 
 ./a.out foo | tee log
 
-diff log - <<END
+diff -u log - <<END
 Creating config
 Starting engine
 Putting new key

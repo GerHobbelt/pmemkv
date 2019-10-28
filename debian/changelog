@@ -1,3 +1,9 @@
+pmemkv (1.0.1~rc2-1) experimental; urgency=medium
+
+  * New upstream pre-release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Mon, 28 Oct 2019 10:46:46 +0100
+
 pmemkv (1.0.1~rc1-1) experimental; urgency=medium
 
   * New upstream pre-release.

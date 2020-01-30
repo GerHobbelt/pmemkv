@@ -1,5 +1,5 @@
 Tests: c-ex
-Depends: gcc, libpmemkv-dev, libc6-dev
+Depends: gcc, libpmemkv-dev (>= 1.9~), libc6-dev
 
 Tests: c++-ex
-Depends: g++, libpmemkv-dev
+Depends: g++, libpmemkv-dev (>= 1.9~)

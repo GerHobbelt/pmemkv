@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -284,6 +284,28 @@ int pmemkv_count_above(pmemkv_db *db, const char *k, size_t kb, size_t *cnt)
 	});
 }
 
+int pmemkv_count_equal_above(pmemkv_db *db, const char *k, size_t kb, size_t *cnt)
+{
+	if (!db)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		return db_to_internal(db)->count_equal_above(pmem::kv::string_view(k, kb),
+							     *cnt);
+	});
+}
+
+int pmemkv_count_equal_below(pmemkv_db *db, const char *k, size_t kb, size_t *cnt)
+{
+	if (!db)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		return db_to_internal(db)->count_equal_below(pmem::kv::string_view(k, kb),
+							     *cnt);
+	});
+}
+
 int pmemkv_count_below(pmemkv_db *db, const char *k, size_t kb, size_t *cnt)
 {
 	if (!db)
@@ -326,6 +348,30 @@ int pmemkv_get_above(pmemkv_db *db, const char *k, size_t kb, pmemkv_get_kv_call
 	return catch_and_return_status(__func__, [&] {
 		return db_to_internal(db)->get_above(pmem::kv::string_view(k, kb), c,
 						     arg);
+	});
+}
+
+int pmemkv_get_equal_above(pmemkv_db *db, const char *k, size_t kb,
+			   pmemkv_get_kv_callback *c, void *arg)
+{
+	if (!db)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		return db_to_internal(db)->get_equal_above(pmem::kv::string_view(k, kb),
+							   c, arg);
+	});
+}
+
+int pmemkv_get_equal_below(pmemkv_db *db, const char *k, size_t kb,
+			   pmemkv_get_kv_callback *c, void *arg)
+{
+	if (!db)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		return db_to_internal(db)->get_equal_below(pmem::kv::string_view(k, kb),
+							   c, arg);
 	});
 }
 
@@ -441,6 +487,16 @@ int pmemkv_remove(pmemkv_db *db, const char *k, size_t kb)
 
 	return catch_and_return_status(__func__, [&] {
 		return db_to_internal(db)->remove(pmem::kv::string_view(k, kb));
+	});
+}
+
+int pmemkv_defrag(pmemkv_db *db, double start_percent, double amount_percent)
+{
+	if (!db)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		return db_to_internal(db)->defrag(start_percent, amount_percent);
 	});
 }
 

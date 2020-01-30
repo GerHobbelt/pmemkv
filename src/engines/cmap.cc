@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,6 +42,10 @@ namespace kv
 
 cmap::cmap(std::unique_ptr<internal::config> cfg) : pmemobj_engine_base(cfg)
 {
+	static_assert(
+		sizeof(internal::cmap::string_t) == 40,
+		"Wrong size of cmap value and key. This probably means that std::string has size > 32");
+
 	LOG("Started ok");
 	Recover();
 }
@@ -108,17 +112,7 @@ status cmap::put(string_view key, string_view value)
 		       << ", value.size=" << std::to_string(value.size()));
 	check_outside_tx();
 
-	internal::cmap::map_t::accessor acc;
-	// XXX - do not create temporary string
-	bool result = container->insert(
-		acc,
-		internal::cmap::map_t::value_type(internal::cmap::string_t(key),
-						  internal::cmap::string_t(value)));
-	if (!result) {
-		pmem::obj::transaction::manual tx(pmpool);
-		acc->second = value;
-		pmem::obj::transaction::commit();
-	}
+	container->insert_or_assign(key, value);
 
 	return status::OK;
 }
@@ -132,18 +126,39 @@ status cmap::remove(string_view key)
 	return erased ? status::OK : status::NOT_FOUND;
 }
 
+status cmap::defrag(double start_percent, double amount_percent)
+{
+	LOG("defrag: start_percent = " << start_percent
+				       << " amount_percent = " << amount_percent);
+	check_outside_tx();
+
+	try {
+		container->defragment(start_percent, amount_percent);
+	} catch (std::range_error &e) {
+		out_err_stream("defrag") << e.what();
+		return status::INVALID_ARGUMENT;
+	} catch (pmem::defrag_error &e) {
+		out_err_stream("defrag") << e.what();
+		return status::DEFRAG_ERROR;
+	}
+
+	return status::OK;
+}
+
 void cmap::Recover()
 {
 	if (!OID_IS_NULL(*root_oid)) {
 		container = (pmem::kv::internal::cmap::map_t *)pmemobj_direct(*root_oid);
 		container->runtime_initialize();
 	} else {
-		pmem::obj::transaction::manual tx(pmpool);
-		pmem::obj::transaction::snapshot(root_oid);
-		*root_oid = pmem::obj::make_persistent<internal::cmap::map_t>().raw();
-		pmem::obj::transaction::commit();
-		container = (pmem::kv::internal::cmap::map_t *)pmemobj_direct(*root_oid);
-		container->runtime_initialize(true);
+		pmem::obj::transaction::run(pmpool, [&] {
+			pmem::obj::transaction::snapshot(root_oid);
+			*root_oid =
+				pmem::obj::make_persistent<internal::cmap::map_t>().raw();
+			container = (pmem::kv::internal::cmap::map_t *)pmemobj_direct(
+				*root_oid);
+			container->runtime_initialize();
+		});
 	}
 }
 

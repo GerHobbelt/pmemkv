@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2017-2019, Intel Corporation
+# Copyright 2017-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -55,8 +55,6 @@ if [[ -z "$HOST_WORKDIR" ]]; then
 	HOST_WORKDIR=$(readlink -f ../..)
 fi
 
-chmod -R a+w $HOST_WORKDIR
-
 if [[ "$TRAVIS_EVENT_TYPE" == "cron" || "$TRAVIS_BRANCH" == "coverity_scan" ]]; then
 	if [[ "$TYPE" != "coverity" ]]; then
 		echo "Skipping non-Coverity job for cron/Coverity build"
@@ -69,13 +67,16 @@ else
 	fi
 fi
 
-imageName=${DOCKERHUB_REPO}:${OS}-${OS_VER}
+imageName=${DOCKERHUB_REPO}:1.1-${OS}-${OS_VER}
 containerName=pmemkv-${OS}-${OS_VER}
 
 if [[ "$command" == "" ]]; then
 	case $TYPE in
 		normal)
 			command="./run-build.sh";
+			;;
+		compatibility)
+			command="./run-compatibility.sh";
 			;;
 		building)
 			command="./run-test-building.sh";
@@ -105,13 +106,19 @@ fi
 WORKDIR=/pmemkv
 SCRIPTSDIR=$WORKDIR/utils/docker
 
+# check if we are running on a CI (Travis or GitHub Actions)
+[ -n "$GITHUB_ACTIONS" -o -n "$TRAVIS" ] && CI_RUN="YES" || CI_RUN="NO"
+
+# do not allocate a pseudo-TTY if we are running on GitHub Actions
+[ ! $GITHUB_ACTIONS ] && TTY='-t' || TTY=''
+
 echo Building ${OS}-${OS_VER}
 
 # Run a container with
 #  - environment variables set (--env)
 #  - host directory containing source mounted (-v)
 #  - working directory set (-w)
-docker run --privileged=true --name=$containerName -ti \
+docker run --privileged=true --name=$containerName -i $TTY \
 	$DNS_SETTING \
 	${docker_opts} \
 	$ci_env \
@@ -128,6 +135,12 @@ docker run --privileged=true --name=$containerName -ti \
 	--env COVERITY_SCAN_TOKEN=$COVERITY_SCAN_TOKEN \
 	--env COVERITY_SCAN_NOTIFICATION_EMAIL=$COVERITY_SCAN_NOTIFICATION_EMAIL \
 	--env TEST_BUILD=$TEST_BUILD \
+	--env DEFAULT_TEST_DIR=/dev/shm \
+	--env TEST_PACKAGES=${TEST_PACKAGES:-ON} \
+	--env BUILD_JSON_CONFIG=${BUILD_JSON_CONFIG:-ON} \
+	--env CHECK_CPP_STYLE=${CHECK_CPP_STYLE:-ON} \
+	--env CI_RUN=$CI_RUN \
+	--shm-size=4G \
 	-v $HOST_WORKDIR:$WORKDIR \
 	-v /etc/localtime:/etc/localtime \
 	-w $SCRIPTSDIR \

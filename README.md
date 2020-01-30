@@ -12,7 +12,12 @@ Key/Value Datastore for Persistent Memory
 `pmemkv` is a local/embedded key-value datastore optimized for persistent memory.
 Rather than being tied to a single language or backing implementation, `pmemkv`
 provides different options for language bindings and storage engines.
-For more information, see http://pmem.io/pmemkv.
+For more information, see https://pmem.io/pmemkv.
+
+The C++ API of pmemkv is documented in the Doxygen documentation listed below:
+
+- [master](https://pmem.io/pmemkv/master/doxygen/index.html)
+- [v1.0](https://pmem.io/pmemkv/v1.0/doxygen/index.html)
 
 There is also a small helper library `pmemkv_json_config` provided.
 See its [manual](doc/libpmemkv_json_config.3.md) for details.
@@ -82,3 +87,4 @@ and the experimental engines are described in the [ENGINES-experimental.md](ENGI
 Benchmarks' scripts and other helpful utilities are available here:
 
 https://github.com/pmem/pmemkv-tools
+

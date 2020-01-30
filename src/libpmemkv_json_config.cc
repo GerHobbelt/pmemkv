@@ -48,9 +48,9 @@ int pmemkv_config_from_json(pmemkv_config *config, const char *json)
 	assert(config && json);
 
 	try {
-		if (doc.Parse(json).HasParseError())
-			return PMEMKV_STATUS_CONFIG_PARSING_ERROR;
-
+		if (doc.Parse(json).HasParseError()) {
+			throw std::runtime_error("Config parsing failed");
+		}
 		for (itr = doc.MemberBegin(); itr != doc.MemberEnd(); ++itr) {
 			if (itr->value.IsString()) {
 				auto value = itr->value.GetString();
@@ -104,7 +104,7 @@ int pmemkv_config_from_json(pmemkv_config *config, const char *json)
 						"Inserting a new entry to the config failed");
 			} else {
 				static std::string kTypeNames[] = {
-					"Null",  "False",  "True",  "Object",
+					"Null",	 "False",  "True",  "Object",
 					"Array", "String", "Number"};
 
 				throw std::runtime_error(

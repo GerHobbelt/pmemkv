@@ -31,60 +31,36 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #
-# install-memkind.sh <install_in_sys> -
-#	if argument is given and equals to "sys" then it installs master version in sys path
-#	otherwise it installs master and stable versions in /opt directory
+# install-memkind.sh <OS> - installs memkind from sources; depends on
+#		the system it uses proper installation paramaters
+#
 
 set -e
 
-# v1.9.0-73-g1ece023; 25.09.2019, contains new libmemkind namespace
-MEMKIND_MASTER_VERSION=1ece023b9c06a68d3f329786d1c4c0e65cef390f
+OS=$1
 
-# v1.9.0; latest release
-MEMKIND_STABLE_VERSION=v1.9.0
+# v1.10.0, contains new libmemkind namespace
+MEMKIND_VERSION=v1.10.0
 
 WORKDIR=$(pwd)
 
-git clone https://github.com/memkind/memkind memkind_git
-# copy is made because `make clean` (after one installation) may omit some files
-cp -R memkind_git memkind_git_stable
+git clone https://github.com/memkind/memkind
+cd $WORKDIR/memkind
+git checkout $MEMKIND_VERSION
 
-# install (in home's subdirectory) current master
-cd $WORKDIR/memkind_git
-git checkout $MEMKIND_MASTER_VERSION
+# set OS-specific configure options
+OS_SPECIFIC=""
+case $(echo $OS | cut -d'-' -f1) in
+	centos|opensuse)
+		OS_SPECIFIC="--libdir=/usr/lib64"
+		;;
+esac
 
-if [ "$1" = "sys" ]; then
-	./autogen.sh
-	./configure --prefix=/usr
-	make -j$(nproc)
-	make -j$(nproc) install
-
-	# cleanup
-	cd $WORKDIR
-	rm -r memkind_git
-	rm -r memkind_git_stable
-	exit 0
-fi
-
-mkdir /opt/memkind-master
 ./autogen.sh
-./configure --prefix=/opt/memkind-master
+./configure --prefix=/usr $OS_SPECIFIC
 make -j$(nproc)
 make -j$(nproc) install
 
+# cleanup
 cd $WORKDIR
-rm -r memkind_git
-
-# install (in home's subdirectory) latest stable release
-cd $WORKDIR/memkind_git_stable
-git checkout $MEMKIND_STABLE_VERSION
-
-mkdir /opt/memkind-stable
-./build_jemalloc.sh
-./autogen.sh
-./configure --prefix=/opt/memkind-stable
-make -j$(nproc)
-make -j$(nproc) install
-
-cd $WORKDIR
-rm -r memkind_git_stable
+rm -r memkind

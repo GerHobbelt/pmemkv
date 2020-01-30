@@ -4,10 +4,10 @@ Content-Style: 'text/css'
 title: _MP(PMEMKV, 3)
 collection: libpmemkv
 header: PMEMKV
-date: pmemkv version 1.0.1
+secondary_title: pmemkv
 ...
 
-[comment]: <> (Copyright 2019, Intel Corporation)
+[comment]: <> (Copyright 2019-2020, Intel Corporation)
 
 [comment]: <> (Redistribution and use in source and binary forms, with or without)
 [comment]: <> (modification, are permitted provided that the following conditions)
@@ -83,6 +83,8 @@ int pmemkv_put(pmemkv_db *db, const char *k, size_t kb, const char *v, size_t vb
 
 int pmemkv_remove(pmemkv_db *db, const char *k, size_t kb);
 
+int pmemkv_defrag(pmemkv_db *db, double start_percent, double amount_percent);
+
 const char *pmemkv_errormsg(void);
 ```
 
@@ -101,7 +103,9 @@ If an engine does not support a certain function, it will return PMEMKV\_STATUS\
 
 :	Opens the pmemkv database and stores a pointer to a *pmemkv_db* instance in `*db`.
 	The `engine` parameter specifies the engine name (see **libpmemkv**(7) for the list of available engines).
-	The `config` parameter specifies configuration (see **libpmemkv_config**(3) for details).
+	The `config` parameter specifies configuration (see **libpmemkv_config**(3) for details). Pmemkv takes
+	ownership of the config parameter - this means that pmemkv_config_delete() must NOT be called
+	after successful open.
 
 `void pmemkv_close(pmemkv_db *kv);`
 
@@ -168,7 +172,7 @@ If an engine does not support a certain function, it will return PMEMKV\_STATUS\
 `int pmemkv_get(pmemkv_db *db, const char *k, size_t kb, pmemkv_get_v_callback *c, void *arg);`
 
 :	Executes function `c` on record with key `k` (of length `kb`).
-	If record is present and no error occured the function returns PMEMKV\_STATUS\_OK.
+	If record is present and no error occurred the function returns PMEMKV\_STATUS\_OK.
 	If record does not exist PMEMKV\_STATUS\_NOT\_FOUND is returned.
 	Other possible return values are described in the *ERRORS* section.
 	Function `c` is called with the following parameters: pointer to a value, size of the value and `arg` specified by the user.
@@ -196,6 +200,11 @@ If an engine does not support a certain function, it will return PMEMKV\_STATUS\
 :	Removes record with key `k` of length `kb`.
 	This function is guaranteed to be implemented by all engines.
 
+`int pmemkv_defrag(pmemkv_db *db, double start_percent, double amount_percent);`
+
+:	Defragments approximately 'amount_percent' percent of elements in the database
+	starting from 'start_percent' percent of elements.
+
 `const char *pmemkv_errormsg(void);`
 
 :	Returns a human readable string describing the last error.
@@ -215,6 +224,7 @@ Each function, except for *pmemkv_close()* and *pmemkv_errormsg()*, returns one 
 + **PMEMKV_STATUS_OUT_OF_MEMORY** -- operation failed because there is not enough memory (or space on the device)
 + **PMEMKV_STATUS_WRONG_ENGINE_NAME** -- engine name does not match any available engine
 + **PMEMKV_STATUS_TRANSACTION_SCOPE_ERROR** -- an error with the scope of the libpmemobj transaction
++ **PMEMKV_STATUS_DEFRAG_ERROR** -- the defragmentation process failed (possibly in the middle of a run)
 
 Status returned from a function can change in a future version of a library to a more specific one.
 For example, if a function returns PMEMKV_STATUS_UNKNOWN_ERROR, it is possible that in future
@@ -229,4 +239,4 @@ is to compare status with PMEMKV_STATUS_OK.
 
 # SEE ALSO #
 
-**libpmemkv**(7), **libpmemkv_config**(3) and **<http://pmem.io>**
+**libpmemkv**(7), **libpmemkv_config**(3) and **<https://pmem.io>**

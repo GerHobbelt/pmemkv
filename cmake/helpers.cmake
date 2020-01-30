@@ -1,5 +1,5 @@
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2019-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -54,11 +54,12 @@ function(set_version VERSION)
 			set(VERSION
 				"${CMAKE_MATCH_1}-rc${CMAKE_MATCH_2}.git${CMAKE_MATCH_3}.${CMAKE_MATCH_4}"
 				PARENT_SCOPE)
+			return()
 		endif()
 
 		# 1.5-19-gb8f78a329 -> 1.5-git19.gb8f78a329
 		string(REGEX MATCHALL
-			"\([0-9.]*\)-\([0-9]*\)-\([0-9a-g]*\)"
+			"([0-9.]*)-([0-9]*)-([0-9a-g]*)"
 			MATCHES
 			${GIT_VERSION})
 		if(MATCHES)
@@ -162,12 +163,12 @@ function(add_check_whitespace name)
 	add_dependencies(check-whitespace check-whitespace-${name})
 endfunction()
 
-# Sets ${ret} to version of program specified by ${name} in major.minor.patch format
-function(get_program_version name ret)
+# Sets ${ret} to version of program specified by ${name} in major.minor format
+function(get_program_version_major_minor name ret)
 	execute_process(COMMAND ${name} --version
 		OUTPUT_VARIABLE cmd_ret
 		ERROR_QUIET)
-	STRING(REGEX MATCH "([0-9]+.)([0-9]+.)([0-9]+)" VERSION ${cmd_ret})
+	STRING(REGEX MATCH "([0-9]+.)([0-9]+.)" VERSION ${cmd_ret})
 	SET(${ret} ${VERSION} PARENT_SCOPE)
 endfunction()
 

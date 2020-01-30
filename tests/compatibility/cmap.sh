@@ -1,5 +1,6 @@
+#!/usr/bin/env bash
 #
-# Copyright 2016-2019, Intel Corporation
+# Copyright 2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -30,77 +31,29 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #
-# Dockerfile - a 'recipe' for Docker to build an image of Fedora-based
-#              environment prepared for running pmemkv build and tests.
+# cmap.sh -- runs cmap compatibility test
 #
 
-# Pull base image
-FROM fedora:30
-MAINTAINER lukasz.stolarczuk@intel.com
+set -e
 
-# Install basic tools
-RUN dnf update -y \
- && dnf install -y \
-	autoconf \
-	automake \
-	clang \
-	cmake \
-	daxctl-devel \
-	doxygen \
-	gcc \
-	gcc-c++ \
-	gdb \
-	git \
-	graphviz \
-	gtest-devel \
-	hub \
-	libtool \
-	make \
-	man \
-	ndctl-devel \
-	numactl-devel \
-	pandoc \
-	passwd \
-	perl-Text-Diff \
-	rapidjson-devel \
-	rpm-build \
-	sudo \
-	tbb-devel \
-	unzip \
-	wget \
-	which \
-&& dnf clean all
+binary1=$1
+binary2=$2
+testfile=$3
 
-# Install glibc-debuginfo
-RUN dnf debuginfo-install -y glibc
+rm -f $testfile
+$binary1 $testfile create
+$binary2 $testfile open
 
-# Install valgrind
-COPY install-valgrind.sh install-valgrind.sh
-RUN ./install-valgrind.sh
+rm -f $testfile
+$binary1 $testfile create_ungraceful
+$binary2 $testfile open
 
-# Install pmdk
-COPY install-pmdk.sh install-pmdk.sh
-RUN ./install-pmdk.sh rpm
+rm -f $testfile
+$binary2 $testfile create
+$binary1 $testfile open
 
-# Install pmdk c++ bindings
-COPY install-libpmemobj-cpp.sh install-libpmemobj-cpp.sh
-RUN ./install-libpmemobj-cpp.sh RPM
+rm -f $testfile
+$binary2 $testfile create_ungraceful
+$binary1 $testfile open
 
-# Install memkind
-COPY install-memkind.sh install-memkind.sh
-RUN ./install-memkind.sh
-
-# Add user
-ENV USER user
-ENV USERPASS pass
-RUN useradd -m $USER
-RUN echo $USERPASS | passwd $USER --stdin
-RUN gpasswd wheel -a $USER
-USER $USER
-
-# Set required environment variables
-ENV OS fedora
-ENV OS_VER 30
-ENV PACKAGE_MANAGER rpm
-ENV NOTTY 1
-
+rm -f $testfile

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -58,11 +58,17 @@ public:
 
 	status count_all(std::size_t &cnt) final;
 	status count_above(string_view key, std::size_t &cnt) final;
+	status count_equal_above(string_view key, std::size_t &cnt) final;
+	status count_equal_below(string_view key, std::size_t &cnt) final;
 	status count_below(string_view key, std::size_t &cnt) final;
 	status count_between(string_view key1, string_view key2, std::size_t &cnt) final;
 
 	status get_all(get_kv_callback *callback, void *arg) final;
 	status get_above(string_view key, get_kv_callback *callback, void *arg) final;
+	status get_equal_above(string_view key, get_kv_callback *callback,
+			       void *arg) final;
+	status get_equal_below(string_view key, get_kv_callback *callback,
+			       void *arg) final;
 	status get_below(string_view key, get_kv_callback *callback, void *arg) final;
 	status get_between(string_view key1, string_view key2, get_kv_callback *callback,
 			   void *arg) final;
@@ -82,7 +88,7 @@ private:
 	using key_type = storage_type;
 	using mapped_type = storage_type;
 	using map_allocator_type =
-		memkind_ns::allocator<std::pair<key_type, mapped_type>>;
+		memkind_ns::allocator<std::pair<const key_type, mapped_type>>;
 	using map_type = std::map<key_type, mapped_type, std::less<key_type>,
 				  std::scoped_allocator_adaptor<map_allocator_type>>;
 

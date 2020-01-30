@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -339,6 +339,70 @@ public:
 			return end();
 	}
 
+	iterator lower_bound(const key_type &key)
+	{
+		assert(std::is_sorted(begin(), end(),
+				      [](const_reference a, const_reference b) {
+					      return a.first < b.first;
+				      }));
+		iterator it = std::lower_bound(
+			begin(), end(), key, [](const_reference entry, const TKey &key) {
+				return entry.first < key;
+			});
+		if (it == end() || it->first == key || it->first > key)
+			return it;
+		else
+			return end();
+	}
+
+	const_iterator lower_bound(const key_type &key) const
+	{
+		assert(std::is_sorted(begin(), end(),
+				      [](const_reference a, const_reference b) {
+					      return a.first < b.first;
+				      }));
+		const_iterator it = std::lower_bound(
+			begin(), end(), key, [](const_reference entry, const TKey &key) {
+				return entry.first < key;
+			});
+		if (it == end() || it->first == key || it->first > key)
+			return it;
+		else
+			return end();
+	}
+
+	iterator upper_bound(const key_type &key)
+	{
+		assert(std::is_sorted(begin(), end(),
+				      [](const_reference a, const_reference b) {
+					      return a.first < b.first;
+				      }));
+		iterator it = std::upper_bound(
+			begin(), end(), key, [](const TKey &key, const_reference entry) {
+				return key < entry.first;
+			});
+		if (it == end() || it->first > key)
+			return it;
+		else
+			return end();
+	}
+
+	const_iterator upper_bound(const key_type &key) const
+	{
+		assert(std::is_sorted(begin(), end(),
+				      [](const_reference a, const_reference b) {
+					      return a.first < b.first;
+				      }));
+		const_iterator it = std::upper_bound(
+			begin(), end(), key, [](const TKey &key, const_reference entry) {
+				return key < entry.first;
+			});
+		if (it == end() || it->first > key)
+			return it;
+		else
+			return end();
+	}
+
 	size_t erase(pool_base &pop, const key_type &key)
 	{
 		assert(std::is_sorted(begin(), end(),
@@ -353,7 +417,7 @@ public:
 	}
 
 	/**
-	 * Return begin iterator on an array of correct indexs.
+	 * Return begin iterator on an array of correct indices.
 	 */
 	iterator begin()
 	{
@@ -369,7 +433,7 @@ public:
 	}
 
 	/**
-	 * Return end iterator on an array of indexs.
+	 * Return end iterator on an array of indices.
 	 */
 	iterator end()
 	{
@@ -724,7 +788,7 @@ public:
 	}
 
 	/**
-	 * Update splitted node with pair of new nodes
+	 * Update split node with pair of new nodes
 	 */
 	void update_splitted_child(pool_base &pop, const_reference entry,
 				   persistent_ptr<node_t> &lnode,
@@ -1132,7 +1196,7 @@ private:
 		leaf_node_persistent_ptr found_node = find_leaf_to_insert(key, path);
 		assert(path[0] == root);
 
-		if (split_node == found_node) { // Split not completted
+		if (split_node == found_node) { // Split not completed
 			const leaf_node_type *split_leaf = cast_leaf(split_node).get();
 			leaf_node_type *lnode = cast_leaf(left_child).get();
 			leaf_node_type *rnode = cast_leaf(right_child).get();
@@ -1141,7 +1205,7 @@ private:
 				if (right_child &&
 				    is_right_node(
 					    split_leaf,
-					    rnode)) { // Both children were allcoated
+					    rnode)) { // Both children were allocated
 						      // during split before crash
 					inner_node_type *parent_node = path.empty()
 						? nullptr
@@ -1190,8 +1254,7 @@ private:
 		uint64_t split_level = split_node->level();
 		assert(split_level <= root_level);
 
-		if (split_node ==
-		    path[root_level - split_level]) { // Split not completted
+		if (split_node == path[root_level - split_level]) { // Split not completed
 			// we could simply roll back
 			const inner_node_type *inner = cast_inner(split_node).get();
 			typename inner_node_type::const_iterator middle =
@@ -1408,6 +1471,94 @@ public:
 			return end();
 
 		typename leaf_node_type::const_iterator leaf_it = leaf->find(key);
+		if (leaf->end() == leaf_it)
+			return end();
+
+		return const_iterator(leaf, leaf_it);
+	}
+
+	/**
+	 * Returns an iterator pointing to the least element which is larger than or equal
+	 * to the given key. Keys are sorted in lexicographical order (see
+	 * std::lexicographical_compare).
+	 *
+	 * @param[in] key sets the lower bound (inclusive)
+	 *
+	 * @return iterator
+	 */
+	iterator lower_bound(const key_type &key)
+	{
+		leaf_node_type *leaf = find_leaf_node(key);
+		if (leaf == nullptr)
+			return end();
+
+		typename leaf_node_type::iterator leaf_it = leaf->lower_bound(key);
+		if (leaf->end() == leaf_it)
+			return end();
+
+		return iterator(leaf, leaf_it);
+	}
+
+	/**
+	 * Returns a const iterator pointing to the least element which is larger than or
+	 * equal to the given key. Keys are sorted in lexicographical order (see
+	 * std::lexicographical_compare).
+	 *
+	 * @param[in] key sets the lower bound (inclusive)
+	 *
+	 * @return const_iterator
+	 */
+	const_iterator lower_bound(const key_type &key) const
+	{
+		const leaf_node_type *leaf = find_leaf_node(key);
+		if (leaf == nullptr)
+			return end();
+
+		typename leaf_node_type::const_iterator leaf_it = leaf->lower_bound(key);
+		if (leaf->end() == leaf_it)
+			return end();
+
+		return const_iterator(leaf, leaf_it);
+	}
+
+	/**
+	 * Returns an iterator pointing to the least element which is larger than the
+	 * given key. Keys are sorted in lexicographical order (see
+	 * std::lexicographical_compare).
+	 *
+	 * @param[in] key sets the lower bound (exclusive)
+	 *
+	 * @return iterator
+	 */
+	iterator upper_bound(const key_type &key)
+	{
+		leaf_node_type *leaf = find_leaf_node(key);
+		if (leaf == nullptr)
+			return end();
+
+		typename leaf_node_type::iterator leaf_it = leaf->upper_bound(key);
+		if (leaf->end() == leaf_it)
+			return end();
+
+		return iterator(leaf, leaf_it);
+	}
+
+	/**
+	 * Returns a const iterator pointing to the least element which is larger than the
+	 * given key. Keys are sorted in lexicographical order (see
+	 * std::lexicographical_compare).
+	 *
+	 * @param[in] key sets the lower bound (exclusive)
+	 *
+	 * @return const_iterator
+	 */
+	const_iterator upper_bound(const key_type &key) const
+	{
+		const leaf_node_type *leaf = find_leaf_node(key);
+		if (leaf == nullptr)
+			return end();
+
+		typename leaf_node_type::const_iterator leaf_it = leaf->upper_bound(key);
 		if (leaf->end() == leaf_it)
 			return end();
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,31 +31,70 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #
-# install-googletest.sh -- install Googletest
+# run-compatibility.sh - verify compatibility
 #
-
-GTEST_VERSION=1.7.0
-URL=https://github.com/google/googletest/archive/release-${GTEST_VERSION}.zip
-GTEST_SHA256HASH=b58cb7547a28b2c718d1e38aee18a3659c9e3ff52440297e965f5edffe34b6d0
-GTEST=googletest-${GTEST_VERSION}.zip
-HASH_FILE=SHA256SUM
-DEST_DIR=/opt/googletest
-PWD=$(pwd)
 
 set -e
 
-rm -rf ${DEST_DIR}
-mkdir -p ${DEST_DIR}
-cd ${DEST_DIR}
+TEST_DIR=${PMEMKV_TEST_DIR:-${DEFAULT_TEST_DIR}}
 
-# create a hash file
-echo "${GTEST_SHA256HASH} ${GTEST}" > ${HASH_FILE}
+PREFIX_HEAD=/opt/pmemkv-head
+PREFIX_1_0_1=/opt/pmemkv-1.0.1
 
-# Download and save Googletest packages
-wget --no-check-certificate ${URL}
-mv release-${GTEST_VERSION}.zip ${GTEST}
+function sudo_password() {
+	echo $USERPASS | sudo -Sk $*
+}
 
-sha256sum -c ${HASH_FILE}
-rm ${HASH_FILE}
+./prepare-for-build.sh
 
-cd ${PWD}
+# build and install pmemkv head
+mkdir $WORKDIR/build
+cd $WORKDIR/build
+
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	-DCMAKE_INSTALL_PREFIX=$PREFIX_HEAD
+make -j$(nproc)
+sudo_password -S make -j$(nproc) install
+
+cd $WORKDIR
+rm -rf $WORKDIR/build
+
+# build and install pmemkv 1.0.1
+mkdir $WORKDIR/build
+cd $WORKDIR/build
+
+git clone https://github.com/pmem/pmemkv pmemkv-1.0.1
+cd pmemkv-1.0.1
+git checkout 1.0.1
+mkdir build
+cd build
+
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	-DCMAKE_INSTALL_PREFIX=$PREFIX_1_0_1
+make -j$(nproc)
+sudo_password -S make -j$(nproc) install
+
+cd $WORKDIR
+rm -rf $WORKDIR/build
+
+echo
+echo "##################################################################"
+echo "### Verifying compatibility with 1.0.1"
+echo "##################################################################"
+
+mkdir $WORKDIR/build
+cd $WORKDIR/build
+
+mkdir head
+cd head
+PKG_CONFIG_PATH=$PREFIX_HEAD/lib64/pkgconfig cmake ../../tests/compatibility
+make -j$(nproc)
+cd ..
+
+mkdir 1.0.1
+cd 1.0.1
+PKG_CONFIG_PATH=$PREFIX_1_0_1/lib64/pkgconfig cmake ../../tests/compatibility
+make -j$(nproc)
+cd ..
+
+PMEM_IS_PMEM_FORCE=1 $WORKDIR/tests/compatibility/cmap.sh $WORKDIR/build/head/cmap_compatibility $WORKDIR/build/1.0.1/cmap_compatibility $TEST_DIR/testfile

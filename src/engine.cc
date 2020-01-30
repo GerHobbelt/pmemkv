@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -167,6 +167,16 @@ status engine_base::count_above(string_view key, std::size_t &cnt)
 	return status::NOT_SUPPORTED;
 }
 
+status engine_base::count_equal_above(string_view key, std::size_t &cnt)
+{
+	return status::NOT_SUPPORTED;
+}
+
+status engine_base::count_equal_below(string_view key, std::size_t &cnt)
+{
+	return status::NOT_SUPPORTED;
+}
+
 status engine_base::count_below(string_view key, std::size_t &cnt)
 {
 	return status::NOT_SUPPORTED;
@@ -186,6 +196,16 @@ status engine_base::get_above(string_view key, get_kv_callback *callback, void *
 	return status::NOT_SUPPORTED;
 }
 
+status engine_base::get_equal_above(string_view key, get_kv_callback *callback, void *arg)
+{
+	return status::NOT_SUPPORTED;
+}
+
+status engine_base::get_equal_below(string_view key, get_kv_callback *callback, void *arg)
+{
+	return status::NOT_SUPPORTED;
+}
+
 status engine_base::get_below(string_view key, get_kv_callback *callback, void *arg)
 {
 	return status::NOT_SUPPORTED;
@@ -198,6 +218,11 @@ status engine_base::get_between(string_view key1, string_view key2,
 }
 
 status engine_base::exists(string_view key)
+{
+	return status::NOT_SUPPORTED;
+}
+
+status engine_base::defrag(double start_percent, double amount_percent)
 {
 	return status::NOT_SUPPORTED;
 }

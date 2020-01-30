@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2019-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -37,10 +37,13 @@
 
 set -e
 
+./prepare-for-build.sh
+
 EXAMPLE_TEST_DIR="/tmp/build_example"
 PREFIX=/usr
-MEMKIND_DEFAULT_PKG_CONFIG_PATH=/opt/memkind-master/lib/pkgconfig/
-MEMKIND_DEFAULT_LD_LIBRARY_PATH=/opt/memkind-master/lib
+TEST_DIR=${PMEMKV_TEST_DIR:-${DEFAULT_TEST_DIR}}
+BUILD_JSON_CONFIG=${BUILD_JSON_CONFIG:-ON}
+CHECK_CPP_STYLE=${CHECK_CPP_STYLE:-ON}
 
 function sudo_password() {
 	echo $USERPASS | sudo -Sk $*
@@ -72,7 +75,6 @@ function compile_example_standalone() {
 	mkdir $EXAMPLE_TEST_DIR
 	cd $EXAMPLE_TEST_DIR
 
-	PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 	cmake $WORKDIR/examples/$1
 
 	# exit on error
@@ -81,26 +83,26 @@ function compile_example_standalone() {
 		return 1
 	fi
 
-	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH make -j$(nproc)
+	make -j$(nproc)
 	cd -
 }
 
 function run_example_standalone() {
 	cd $EXAMPLE_TEST_DIR
 
-	rm -f pool
-	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH ./$1 pool
+	./$1 $2
+
 	# exit on error
 	if [[ $? != 0 ]]; then
 		cd -
 		return 1
 	fi
 
+	rm -f $2
+
 	cd -
 }
 
-# Resize /dev/shm, since default one is too small
-sudo_password -S mount -oremount,size=4G /dev/shm
 cd $WORKDIR
 
 echo
@@ -117,11 +119,13 @@ echo "##############################################################"
 mkdir $WORKDIR/build
 cd $WORKDIR/build
 
-PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 cmake .. -DCMAKE_BUILD_TYPE=Debug \
-	-DTEST_DIR=/dev/shm \
+	-DTEST_DIR=$TEST_DIR \
 	-DCMAKE_INSTALL_PREFIX=$PREFIX \
 	-DCOVERAGE=$COVERAGE \
+	-DENGINE_STREE=1 \
+	-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG} \
+	-DCHECK_CPP_STYLE=${CHECK_CPP_STYLE} \
 	-DDEVELOPER_MODE=1
 
 make -j$(nproc)
@@ -135,11 +139,23 @@ fi
 
 # Verify installed libraries
 compile_example_standalone pmemkv_basic_c
-run_example_standalone pmemkv_basic_c
+run_example_standalone pmemkv_basic_c pool
 compile_example_standalone pmemkv_basic_cpp
-run_example_standalone pmemkv_basic_cpp
-compile_example_standalone pmemkv_config_c
-run_example_standalone pmemkv_config_c
+run_example_standalone pmemkv_basic_cpp pool
+if [ "$BUILD_JSON_CONFIG" == "ON" ]; then
+	compile_example_standalone pmemkv_config_c
+	run_example_standalone pmemkv_config_c pool
+fi
+compile_example_standalone pmemkv_pmemobj_cpp
+run_example_standalone pmemkv_pmemobj_cpp pool
+
+# Poolset example
+compile_example_standalone pmemkv_open_cpp
+pmempool create -l "pmemkv" obj $WORKDIR/examples/example.poolset
+run_example_standalone pmemkv_open_cpp $WORKDIR/examples/example.poolset
+
+# Expect failure - non-existsing path is passed
+run_example_standalone pmemkv_open_cpp /non-existing/path && exit 1
 
 # Uninstall libraries
 cd $WORKDIR/build

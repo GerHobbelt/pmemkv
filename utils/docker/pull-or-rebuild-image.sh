@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2016-2019, Intel Corporation
+# Copyright 2016-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -49,6 +49,30 @@
 
 set -e
 
+source $(dirname $0)/set-vars.sh
+
+function get_commit_range_from_last_merge {
+	# get commit id of the last merge
+	LAST_MERGE=$(git log --merges --pretty=%H -1)
+	LAST_COMMIT=$(git log --pretty=%H -1)
+	if [ "$LAST_MERGE" == "$LAST_COMMIT" ]; then
+		# GitHub Actions commits its own merge in case of pull requests
+		# so the first merge commit has to be skipped.
+		LAST_MERGE=$(git log --merges --pretty=%H -2 | tail -n1)
+	fi
+	if [ "$LAST_MERGE" == "" ]; then
+		# possible in case of shallow clones
+		COMMIT_RANGE=""
+	else
+		COMMIT_RANGE="$LAST_MERGE..HEAD"
+		# make sure it works now
+		if ! git rev-list $COMMIT_RANGE >/dev/null; then
+			COMMIT_RANGE=""
+		fi
+	fi
+	echo $COMMIT_RANGE
+}
+
 if [[ "$TRAVIS_EVENT_TYPE" != "cron" && "$TRAVIS_BRANCH" != "coverity_scan" \
 	&& "$TYPE" == "coverity" ]]; then
 	echo "INFO: Skip Coverity scan job if build is triggered neither by " \
@@ -77,33 +101,35 @@ fi
 
 # TRAVIS_COMMIT_RANGE is usually invalid for force pushes - fix it when used
 # with non-upstream repository
-if [ -n "$TRAVIS_COMMIT_RANGE" -a "$TRAVIS_REPO_SLUG" != "${GITHUB_REPO}" ]; then
+if [ -n "$TRAVIS_COMMIT_RANGE" -a "$TRAVIS_REPO_SLUG" != "$GITHUB_REPO" ]; then
 	if ! git rev-list $TRAVIS_COMMIT_RANGE; then
-		# get commit id of the last merge
-		LAST_MERGE=$(git log --merges --pretty=%H -1)
-		if [ "$LAST_MERGE" == "" ]; then
-			# possible in case of shallow clones
-			TRAVIS_COMMIT_RANGE=""
-		else
-			TRAVIS_COMMIT_RANGE="$LAST_MERGE..HEAD"
-			# make sure it works now
-			if ! git rev-list $TRAVIS_COMMIT_RANGE; then
-				TRAVIS_COMMIT_RANGE=""
-			fi
-		fi
+		TRAVIS_COMMIT_RANGE=$(get_commit_range_from_last_merge)
 	fi
 fi
 
-# Find all the commits for the current build
-if [[ -n "$TRAVIS_COMMIT_RANGE" ]]; then
+# Fix Travis commit range
+if [ -n "$TRAVIS_COMMIT_RANGE" ]; then
 	# $TRAVIS_COMMIT_RANGE contains "..." instead of ".."
 	# https://github.com/travis-ci/travis-ci/issues/4596
 	PR_COMMIT_RANGE="${TRAVIS_COMMIT_RANGE/.../..}"
-
-	commits=$(git rev-list $PR_COMMIT_RANGE)
-else
-	commits=$TRAVIS_COMMIT
 fi
+
+# Set the commit range in case of GitHub Actions
+if [ -n "$GITHUB_ACTIONS" ]; then
+	PR_COMMIT_RANGE=$(get_commit_range_from_last_merge)
+fi
+
+# Find all the commits for the current build
+if [ -n "$PR_COMMIT_RANGE" ]; then
+	commits=$(git rev-list $PR_COMMIT_RANGE)
+elif [ -n "$TRAVIS" ]; then
+	commits=$TRAVIS_COMMIT
+elif [ -n "$GITHUB_ACTIONS" ]; then
+	commits=$GITHUB_SHA
+else
+	commits=$(git log --pretty=%H -1)
+fi
+
 echo "Commits in the commit range:"
 for commit in $commits; do echo $commit; done
 
@@ -134,21 +160,15 @@ for file in $files; do
 		# repository's master branch, and the Travis build is not
 		# of the "pull_request" type). In that case, create the empty
 		# file.
-		if [[ $TRAVIS_REPO_SLUG == "${GITHUB_REPO}" \
-			&& $TRAVIS_BRANCH == "master" \
+		if [[ "${TRAVIS_REPO_SLUG}" == "${GITHUB_REPO}" \
+			&& ($TRAVIS_BRANCH == stable-* || $TRAVIS_BRANCH == master) \
 			&& $TRAVIS_EVENT_TYPE != "pull_request"
 			&& $PUSH_IMAGE == "1" ]]
 		then
 			echo "The image will be pushed to Docker Hub"
-			touch push_image_to_repo_flag
+			touch $CI_FILE_PUSH_IMAGE_TO_REPO
 		else
 			echo "Skip pushing the image to Docker Hub"
-		fi
-
-		if [[ $PUSH_IMAGE == "1" ]]
-		then
-			echo "Skip build package check if image has to be pushed"
-			touch skip_build_package_check
 		fi
 		exit 0
 	fi
@@ -156,4 +176,4 @@ done
 
 # Getting here means rebuilding the Docker image is not required.
 # Pull the image from Docker Hub.
-docker pull ${DOCKERHUB_REPO}:${OS}-${OS_VER}
+docker pull ${DOCKERHUB_REPO}:1.1-${OS}-${OS_VER}

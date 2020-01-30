@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2019-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -38,10 +38,13 @@
 
 set -e
 
+./prepare-for-build.sh
+
 EXAMPLE_TEST_DIR="/tmp/build_example"
 PREFIX=/usr
-MEMKIND_DEFAULT_PKG_CONFIG_PATH=/opt/memkind-master/lib/pkgconfig/
-MEMKIND_DEFAULT_LD_LIBRARY_PATH=/opt/memkind-master/lib
+TEST_DIR=${PMEMKV_TEST_DIR:-${DEFAULT_TEST_DIR}}
+TEST_PACKAGES=${TEST_PACKAGES:-ON}
+BUILD_JSON_CONFIG=${BUILD_JSON_CONFIG:-ON}
 
 function sudo_password() {
 	echo $USERPASS | sudo -Sk $*
@@ -73,7 +76,6 @@ function compile_example_standalone() {
 	mkdir $EXAMPLE_TEST_DIR
 	cd $EXAMPLE_TEST_DIR
 
-	PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 	cmake $WORKDIR/examples/$1
 
 	# exit on error
@@ -82,7 +84,7 @@ function compile_example_standalone() {
 		return 1
 	fi
 
-	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH make -j$(nproc)
+	make -j$(nproc)
 	cd -
 }
 
@@ -90,7 +92,7 @@ function run_example_standalone() {
 	cd $EXAMPLE_TEST_DIR
 
 	rm -f pool
-	LD_LIBRARY_PATH=$MEMKIND_DEFAULT_LD_LIBRARY_PATH:$LD_LIBRARY_PATH ./$1 pool
+	./$1 pool
 	# exit on error
 	if [[ $? != 0 ]]; then
 		cd -
@@ -100,55 +102,119 @@ function run_example_standalone() {
 	cd -
 }
 
-# Resize /dev/shm, since default one is too small
-sudo_password -S mount -oremount,size=4G /dev/shm
-echo
+function run_test_check_support_cpp20_gcc() {
+	CWD=$(pwd)
+	echo
+	echo "##############################################################"
+	echo "### Checking C++20 support in g++"
+	echo "##############################################################"
+	mkdir $WORKDIR/build
+	cd $WORKDIR/build
+
+	CXX=g++ cmake .. -DCMAKE_BUILD_TYPE=Release \
+		-DTEST_DIR=$TEST_DIR \
+		-DCMAKE_INSTALL_PREFIX=$PREFIX \
+		-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG} \
+		-DCOVERAGE=$COVERAGE \
+		-DDEVELOPER_MODE=1 \
+		-DCXX_STANDARD=20
+
+	make -j$(nproc)
+	# Run basic tests
+	ctest -R "SimpleTest" --output-on-failure
+
+	cd $CWD
+	rm -rf $WORKDIR/build
+}
+
+function run_test_check_support_cpp20_clang() {
+	CWD=$(pwd)
+	echo
+	echo "##############################################################"
+	echo "### Checking C++20 support in clang++"
+	echo "##############################################################"
+	mkdir $WORKDIR/build
+	cd $WORKDIR/build
+
+	CXX=clang++ cmake .. -DCMAKE_BUILD_TYPE=Release \
+		-DTEST_DIR=$TEST_DIR \
+		-DCMAKE_INSTALL_PREFIX=$PREFIX \
+		-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG} \
+		-DCOVERAGE=$COVERAGE \
+		-DDEVELOPER_MODE=1 \
+		-DCXX_STANDARD=20
+
+	make -j$(nproc)
+	# Run basic tests
+	ctest -R "SimpleTest" --output-on-failure
+
+	cd $CWD
+	rm -rf $WORKDIR/build
+}
+
+function verify_building_of_packages() {
+	echo
+	echo "##############################################################"
+	echo "### Verifying building of packages"
+	echo "##############################################################"
+
+	# Fetch git history for `git describe` to work,
+	# so that package has proper 'version' field
+	[ -f .git/shallow ] && git fetch --unshallow --tags
+
+	mkdir $WORKDIR/build
+	cd $WORKDIR/build
+
+	cmake .. -DCMAKE_BUILD_TYPE=Debug \
+		-DTEST_DIR=$TEST_DIR \
+		-DCMAKE_INSTALL_PREFIX=$PREFIX \
+		-DDEVELOPER_MODE=1 \
+		-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG} \
+		-DCPACK_GENERATOR=$PACKAGE_MANAGER
+
+	echo
+	echo "### Making sure there is no libpmemkv currently installed"
+	echo "---------------------------- Error expected! ------------------------------"
+	compile_example_standalone pmemkv_basic_cpp && exit 1
+	echo "---------------------------------------------------------------------------"
+
+	make -j$(nproc) package
+
+	if [ $PACKAGE_MANAGER = "deb" ]; then
+		sudo_password dpkg -i libpmemkv*.deb
+	elif [ $PACKAGE_MANAGER = "rpm" ]; then
+		sudo_password rpm -i libpmemkv*.rpm
+	fi
+
+	# Verify installed packages
+	compile_example_standalone pmemkv_basic_c
+	run_example_standalone pmemkv_basic_c
+	compile_example_standalone pmemkv_basic_cpp
+	run_example_standalone pmemkv_basic_cpp
+
+	# Clean after installation
+	if [ $PACKAGE_MANAGER = "deb" ]; then
+		sudo_password dpkg -r libpmemkv-dev
+	elif [ $PACKAGE_MANAGER = "rpm" ]; then
+		sudo_password rpm -e --nodeps libpmemkv-devel
+	fi
+
+	cd $WORKDIR
+	rm -rf $WORKDIR/build
+}
 
 cd $WORKDIR
 
-echo
-echo "##############################################################"
-echo "### Checking C++20 support in g++"
-echo "##############################################################"
-mkdir $WORKDIR/build
-cd $WORKDIR/build
+CMAKE_VERSION=$(cmake --version | head -n1 | grep -oE '[0-9].[0-9]*')
+CMAKE_VERSION_MAJOR=$(echo $CMAKE_VERSION | cut -d. -f1)
+CMAKE_VERSION_MINOR=$(echo $CMAKE_VERSION | cut -d. -f2)
+CMAKE_VERSION_NUMBER=$((100 * $CMAKE_VERSION_MAJOR + $CMAKE_VERSION_MINOR))
 
-PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
-CXX=g++ cmake .. -DCMAKE_BUILD_TYPE=Release \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DCOVERAGE=$COVERAGE \
-	-DDEVELOPER_MODE=1 \
-	-DCXX_STANDARD=20
-
-make -j$(nproc)
-# Run basic tests
-ctest -R "SimpleTest"
-
-cd $WORKDIR
-rm -rf $WORKDIR/build
-
-echo
-echo "##############################################################"
-echo "### Checking C++20 support in clang++"
-echo "##############################################################"
-mkdir $WORKDIR/build
-cd $WORKDIR/build
-
-PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
-CXX=clang++ cmake .. -DCMAKE_BUILD_TYPE=Release \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DCOVERAGE=$COVERAGE \
-	-DDEVELOPER_MODE=1 \
-	-DCXX_STANDARD=20
-
-make -j$(nproc)
-# Run basic tests
-ctest -R "SimpleTest"
-
-cd $WORKDIR
-rm -rf $WORKDIR/build
+# CXX_STANDARD==20 is supported since CMake 3.12
+if [ $CMAKE_VERSION_NUMBER -ge 312 ]; then
+	run_test_check_support_cpp20_gcc
+	run_test_check_support_cpp20_clang
+fi
 
 echo
 echo "##############################################################"
@@ -176,10 +242,10 @@ do
 	echo "##############################################################"
 	echo "### Verifying building of the '$engine_flag' engine"
 	echo "##############################################################"
-	PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 	cmake .. -DENGINE_VSMAP=OFF \
 		-DENGINE_VCMAP=OFF \
 		-DENGINE_CMAP=OFF \
+		-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG} \
 		-D$engine_flag=ON
 	make -j$(nproc)
 	# list all tests in this build
@@ -201,12 +267,12 @@ echo "##############################################################"
 mkdir $WORKDIR/build
 cd $WORKDIR/build
 
-PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
 cmake .. -DENGINE_VSMAP=ON \
 	-DENGINE_VCMAP=ON \
 	-DENGINE_CMAP=ON \
 	-DENGINE_STREE=ON \
-	-DENGINE_TREE3=ON
+	-DENGINE_TREE3=ON \
+	-DBUILD_JSON_CONFIG=${BUILD_JSON_CONFIG}
 make -j$(nproc)
 # list all tests in this build
 ctest -N
@@ -214,66 +280,15 @@ ctest -N
 cd $WORKDIR
 rm -rf $WORKDIR/build
 
-echo
-echo "##############################################################"
-echo "### Verifying building with latest stable memkind release"
-echo "##############################################################"
-mkdir $WORKDIR/build
-cd $WORKDIR/build
-
-PKG_CONFIG_PATH=/opt/memkind-stable/lib/pkgconfig/:$PKG_CONFIG_PATH \
-cmake .. -DTEST_DIR=/dev/shm \
-	-DENGINE_VSMAP=ON \
-	-DENGINE_VCMAP=ON \
-	-DENGINE_CMAP=OFF
-make -j$(nproc)
-# Run basic tests
-ctest -R "SimpleTest"
-
-cd $WORKDIR
-rm -rf $WORKDIR/build
-
-echo
-echo "##############################################################"
-echo "### Verifying building of packages"
-echo "##############################################################"
-
-# Fetch git history for `git describe` to work,
-# so that package has proper 'version' field
-[ -f .git/shallow ] && git fetch --unshallow --tags
-
-mkdir $WORKDIR/build
-cd $WORKDIR/build
-
-# XXX - Disable VCMAP and VSMAP until we'll get packages for memkind.
-PKG_CONFIG_PATH=$MEMKIND_DEFAULT_PKG_CONFIG_PATH:$PKG_CONFIG_PATH \
-cmake .. -DCMAKE_BUILD_TYPE=Debug \
-	-DTEST_DIR=/dev/shm \
-	-DCMAKE_INSTALL_PREFIX=$PREFIX \
-	-DDEVELOPER_MODE=1 \
-	-DCPACK_GENERATOR=$PACKAGE_MANAGER \
-	-DENGINE_VCMAP=OFF \
-	-DENGINE_VSMAP=OFF
-
-echo
-echo "### Making sure there is no libpmemkv currently installed"
-echo "---------------------------- Error expected! ------------------------------"
-compile_example_standalone pmemkv_basic_cpp && exit 1
-echo "---------------------------------------------------------------------------"
-
-make -j$(nproc) package
-
-if [ $PACKAGE_MANAGER = "deb" ]; then
-	sudo_password dpkg -i libpmemkv*.deb
-elif [ $PACKAGE_MANAGER = "rpm" ]; then
-	sudo_password rpm -i libpmemkv*.rpm
-fi
-
-# Verify installed packages
-compile_example_standalone pmemkv_basic_c
-run_example_standalone pmemkv_basic_c
-compile_example_standalone pmemkv_basic_cpp
-run_example_standalone pmemkv_basic_cpp
+# building of packages should be verified only if PACKAGE_MANAGER equals 'rpm' or 'deb'
+case $PACKAGE_MANAGER in
+	rpm|deb)
+		[ "$TEST_PACKAGES" == "ON" ] && verify_building_of_packages
+		;;
+	*)
+		echo "Notice: skipping building of packages because PACKAGE_MANAGER is not equal 'rpm' nor 'deb' ..."
+		;;
+esac
 
 # Trigger auto doc update on master
 if [[ "$AUTO_DOC_UPDATE" == "1" ]]; then

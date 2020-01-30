@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Intel Corporation
+ * Copyright 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -73,6 +73,7 @@ public:
 
 	~VSMapBaseTest()
 	{
+		kv->close();
 		delete kv;
 		std::remove(PATH.c_str());
 	}
@@ -102,6 +103,7 @@ TEST_F(VSMapTest, SimpleTest_TRACERS_M)
 	value = "";
 	kv->get("key1", [&](string_view v) { value.append(v.data(), v.size()); });
 	ASSERT_TRUE(value == "value1");
+	ASSERT_TRUE(kv->defrag() == status::NOT_SUPPORTED);
 }
 
 TEST_F(VSMapTest, BinaryKeyTest_TRACERS_M)
@@ -644,6 +646,166 @@ TEST_F(VSMapTest, UsesGetAllAboveTest_TRACERS_M)
 		},
 		&x);
 	ASSERT_TRUE(x == "BB,5|BC,6|记!,RR|");
+}
+
+TEST_F(VSMapTest, UsesGetAllEqualAboveTest_TRACERS_M)
+{
+	ASSERT_TRUE(kv->put("A", "1") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("AB", "2") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("AC", "3") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("B", "4") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("BB", "5") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("BC", "6") == status::OK) << errormsg();
+
+	std::string x;
+	std::size_t cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_above("B", cnt) == status::OK);
+	ASSERT_EQ(3, cnt);
+	kv->get_equal_above("B", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "B,4|BB,5|BC,6|");
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_above("", cnt) == status::OK);
+	ASSERT_EQ(6, cnt);
+	x = "";
+	kv->get_equal_above("", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "A,1|AB,2|AC,3|B,4|BB,5|BC,6|");
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_above("ZZZ", cnt) == status::OK);
+	ASSERT_EQ(0, cnt);
+	x = "";
+	kv->get_equal_above("ZZZ", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x.empty());
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_above("AZ", cnt) == status::OK);
+	ASSERT_EQ(3, cnt);
+	x = "";
+	kv->get_equal_above("AZ", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "B,4|BB,5|BC,6|");
+
+	ASSERT_TRUE(kv->put("记!", "RR") == status::OK) << errormsg();
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_above("B", cnt) == status::OK);
+	ASSERT_EQ(4, cnt);
+	x = "";
+	kv->get_equal_above(
+		"B",
+		[](const char *k, size_t kb, const char *v, size_t vb, void *arg) {
+			const auto c = ((std::string *)arg);
+			c->append(std::string(k, kb))
+				.append(",")
+				.append(std::string(v, vb))
+				.append("|");
+			return 0;
+		},
+		&x);
+	ASSERT_TRUE(x == "B,4|BB,5|BC,6|记!,RR|");
+}
+
+TEST_F(VSMapTest, UsesGetAllEqualBelowTest_TRACERS_M)
+{
+	ASSERT_TRUE(kv->put("A", "1") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("AB", "2") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("AC", "3") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("B", "4") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("BB", "5") == status::OK) << errormsg();
+	ASSERT_TRUE(kv->put("BC", "6") == status::OK) << errormsg();
+
+	std::string x;
+	std::size_t cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_below("B", cnt) == status::OK);
+	ASSERT_EQ(4, cnt);
+	kv->get_equal_below("B", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "A,1|AB,2|AC,3|B,4|");
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_below("", cnt) == status::OK);
+	ASSERT_EQ(0, cnt);
+	x = "";
+	kv->get_equal_below("", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x.empty());
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_below("ZZZ", cnt) == status::OK);
+	ASSERT_EQ(6, cnt);
+	x = "";
+	kv->get_equal_below("ZZZ", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "A,1|AB,2|AC,3|B,4|BB,5|BC,6|");
+
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_below("AZ", cnt) == status::OK);
+	ASSERT_EQ(3, cnt);
+	x = "";
+	kv->get_equal_below("AZ", [&](string_view k, string_view v) {
+		x.append(k.data(), k.size())
+			.append(",")
+			.append(v.data(), v.size())
+			.append("|");
+		return 0;
+	});
+	ASSERT_TRUE(x == "A,1|AB,2|AC,3|");
+
+	ASSERT_TRUE(kv->put("记!", "RR") == status::OK) << errormsg();
+	cnt = std::numeric_limits<std::size_t>::max();
+	ASSERT_TRUE(kv->count_equal_below("记!", cnt) == status::OK);
+	ASSERT_EQ(7, cnt);
+	x = "";
+	kv->get_equal_below(
+		"记!",
+		[](const char *k, size_t kb, const char *v, size_t vb, void *arg) {
+			const auto c = ((std::string *)arg);
+			c->append(std::string(k, kb))
+				.append(",")
+				.append(std::string(v, vb))
+				.append("|");
+			return 0;
+		},
+		&x);
+	ASSERT_TRUE(x == "A,1|AB,2|AC,3|B,4|BB,5|BC,6|记!,RR|");
 }
 
 TEST_F(VSMapTest, UsesGetAllBelowTest_TRACERS_M)

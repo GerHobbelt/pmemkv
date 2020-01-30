@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Intel Corporation
+ * Copyright 2019-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -60,12 +60,18 @@ public:
 
 	virtual status count_all(std::size_t &cnt);
 	virtual status count_above(string_view key, std::size_t &cnt);
+	virtual status count_equal_above(string_view key, std::size_t &cnt);
+	virtual status count_equal_below(string_view key, std::size_t &cnt);
 	virtual status count_below(string_view key, std::size_t &cnt);
 	virtual status count_between(string_view key1, string_view key2,
 				     std::size_t &cnt);
 
 	virtual status get_all(get_kv_callback *callback, void *arg);
 	virtual status get_above(string_view key, get_kv_callback *callback, void *arg);
+	virtual status get_equal_above(string_view key, get_kv_callback *callback,
+				       void *arg);
+	virtual status get_equal_below(string_view key, get_kv_callback *callback,
+				       void *arg);
 	virtual status get_below(string_view key, get_kv_callback *callback, void *arg);
 	virtual status get_between(string_view key1, string_view key2,
 				   get_kv_callback *callback, void *arg);
@@ -75,6 +81,7 @@ public:
 	virtual status get(string_view key, get_v_callback *callback, void *arg) = 0;
 	virtual status put(string_view key, string_view value) = 0;
 	virtual status remove(string_view key) = 0;
+	virtual status defrag(double start_percent, double amount_percent);
 
 private:
 	static void check_config_null(const std::string &engine_name,

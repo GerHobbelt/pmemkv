@@ -29,75 +29,21 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(DEFAULT_TEST_DIR ${CMAKE_CURRENT_BINARY_DIR})
-
-set(TEST_DIR ${DEFAULT_TEST_DIR}
-	CACHE STRING "working directory for tests")
-
-set(GLOBAL_TEST_ARGS -DPARENT_DIR=${TEST_DIR}/)
-
-option(TRACE_TESTS "enable expanded tests' tracing" OFF)
-
-if(TRACE_TESTS)
-	set(GLOBAL_TEST_ARGS ${GLOBAL_TEST_ARGS} --trace-expand)
-endif()
+include(ctest_helpers.cmake)
 
 add_cppstyle(tests ${CMAKE_CURRENT_SOURCE_DIR}/*.cc
 		${CMAKE_CURRENT_SOURCE_DIR}/*.h
 		${CMAKE_CURRENT_SOURCE_DIR}/engines/*.cc
 		${CMAKE_CURRENT_SOURCE_DIR}/engines-experimental/*.cc
-		${CMAKE_CURRENT_SOURCE_DIR}/config/*.cc)
+		${CMAKE_CURRENT_SOURCE_DIR}/config/*.cc
+		${CMAKE_CURRENT_SOURCE_DIR}/compatibility/*.cc)
 
 add_check_whitespace(tests ${CMAKE_CURRENT_SOURCE_DIR}/*.cc
 		${CMAKE_CURRENT_SOURCE_DIR}/*.h
 		${CMAKE_CURRENT_SOURCE_DIR}/engines/*.cc
 		${CMAKE_CURRENT_SOURCE_DIR}/engines-experimental/*.cc
-		${CMAKE_CURRENT_SOURCE_DIR}/config/*.cc)
-
-set(vg_tracers memcheck helgrind drd pmemcheck pmreorder)
-set(pmemcheck_tracers pmemcheck pmreorder)
-
-#
-# test -- add a test 'test_name'
-#
-# Arguments:
-#	cmake_file  - cmake file to run the test
-#	test_name   - name of a test to be printed out by ctest (must be uniqe)
-#	test_filter - name of a test in the gtest binary (used as a gtest filter)
-#	tracer      - Valgrind tool (memcheck/helgrind/drd/pmemcheck)
-#	              or pmreorder used to trace the test
-#
-function(test cmake_file test_name test_filter tracer)
-	if (${tracer} IN_LIST vg_tracers)
-		if (NOT VALGRIND_FOUND)
-			return()
-		endif()
-		if (COVERAGE)
-			return()
-		endif()
-	endif()
-	if (${tracer} IN_LIST pmemcheck_tracers)
-		if (NOT VALGRIND_PMEMCHECK_FOUND)
-			return()
-		endif()
-	endif()
-
-	add_test(NAME ${test_name}
-		COMMAND ${CMAKE_COMMAND}
-			${GLOBAL_TEST_ARGS}
-			-DTEST_NAME=${test_filter}
-			-DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-			-DBIN_DIR=${TEST_DIR}/${test_filter}-${tracer}
-			-DCONFIG=$<CONFIG>
-			-DTRACER=${tracer}
-			-DFILE_TEST_FILES=${FILE_TEST_FILES}
-			-DFILE_ALL_TESTS=${FILE_ALL_TESTS}
-			-P ${CMAKE_CURRENT_SOURCE_DIR}/${cmake_file}.cmake)
-
-	set_tests_properties(${test_name} PROPERTIES
-		ENVIRONMENT "LC_ALL=C;PATH=$ENV{PATH};PMEM_IS_PMEM_FORCE=1"
-		TIMEOUT 300)
-endfunction()
+		${CMAKE_CURRENT_SOURCE_DIR}/config/*.cc
+		${CMAKE_CURRENT_SOURCE_DIR}/compatibility/*.cc)
 
 if (COVERAGE AND VALGRIND_FOUND)
 	message(STATUS "This is the Coverage build, skipping Valgrind tests")
@@ -131,12 +77,12 @@ function(build_example_pmemkv_basic_c)
 	ignore_unused_but_set_variable_c(ex_pmemkv_basic_c)
 endfunction()
 
-function(build_example_pmemkv_pmemobj_basic_cpp)
+function(build_example_pmemkv_pmemobj_cpp)
 	if(NOT("${LIBPMEMOBJ++_LIBRARIES}" STREQUAL ""))
-		add_executable(ex_pmemkv_pmemobj_basic_cpp ../examples/pmemkv_pmemobj_cpp/pmemkv_pmemobj_basic.cpp)
-		target_include_directories(ex_pmemkv_pmemobj_basic_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-		target_link_libraries(ex_pmemkv_pmemobj_basic_cpp pmemkv ${LIBPMEMOBJ++_LIBRARIES})
-		ignore_unused_but_set_variable_cpp(ex_pmemkv_pmemobj_basic_cpp)
+		add_executable(ex_pmemkv_pmemobj_cpp ../examples/pmemkv_pmemobj_cpp/pmemkv_pmemobj.cpp)
+		target_include_directories(ex_pmemkv_pmemobj_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+		target_link_libraries(ex_pmemkv_pmemobj_cpp pmemkv ${LIBPMEMOBJ++_LIBRARIES})
+		ignore_unused_but_set_variable_cpp(ex_pmemkv_pmemobj_cpp)
 	endif()
 endfunction()
 
@@ -259,6 +205,13 @@ endif()
 
 target_link_libraries(pmemkv_test pmemkv libgtest ${CMAKE_DL_LIBS})
 
+# XXX It should be removed when all supported distributions update gtest
+# to at least v1.9.0.20190831-1
+# and the 'INSTANTIATE_TEST_CASE_P' macro can be replaced
+# with the 'INSTANTIATE_TEST_SUITE_P' macro.
+# See https://github.com/pmem/pmemkv/issues/527 for more details.
+target_compile_options(pmemkv_test PUBLIC "-Wno-deprecated-declarations")
+
 if(BUILD_JSON_CONFIG)
 	target_link_libraries(pmemkv_test pmemkv_json_config)
 endif()
@@ -291,10 +244,10 @@ test("run-binary" wrong_engine_name_test wrong_engine_name_test none)
 if(BUILD_EXAMPLES AND ENGINE_CMAP)
 	build_example_pmemkv_basic_c()
 	build_example_pmemkv_basic_cpp()
-	build_example_pmemkv_pmemobj_basic_cpp()
+	build_example_pmemkv_pmemobj_cpp()
 	test("run-binary" ex_pmemkv_basic_c ex_pmemkv_basic_c none)
 	test("run-binary" ex_pmemkv_basic_cpp ex_pmemkv_basic_cpp none)
-	test("run-binary" ex_pmemkv_pmemobj_basic_cpp ex_pmemkv_pmemobj_basic_cpp none)
+	test("run-binary" ex_pmemkv_pmemobj_cpp ex_pmemkv_pmemobj_cpp none)
 elseif(BUILD_EXAMPLES AND NOT ENGINE_CMAP)
 	message(WARNING
 		"Examples use cmap engine, which is disabled, hence their execution "

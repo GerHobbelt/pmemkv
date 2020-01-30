@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2019, Intel Corporation
+# Copyright 2019-2020, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -32,25 +32,40 @@
 
 #
 # install-libpmemobj-cpp.sh <package_type>
-#           - installs PMDK C++ bindings (stable) packages
+#		- installs PMDK C++ bindings (libpmemobj-cpp)
 #
 
 set -e
 
+if [ "${SKIP_LIBPMEMOBJCPP_BUILD}" ]; then
+	echo "Variable 'SKIP_LIBPMEMOBJCPP_BUILD' is set; skipping building libpmemobj-cpp"
+	exit
+fi
+
+PREFIX=/usr
+PACKAGE_TYPE=$1
+
+# 1.9-rc1; 27.01.2020
+LIBPMEMOBJ_CPP_VERSION=132f0d8339175496e3776e13f34f5b9f9bbe0b4b
+
 git clone https://github.com/pmem/libpmemobj-cpp --shallow-since=2019-10-02
 cd libpmemobj-cpp
-
-git checkout 1.8
+git checkout $LIBPMEMOBJ_CPP_VERSION
 
 mkdir build
 cd build
 
-cmake .. -DCPACK_GENERATOR="$1" -DCMAKE_INSTALL_PREFIX=/usr
-make -j$(nproc) package
-if [ "$1" = "DEB" ]; then
-      sudo dpkg -i libpmemobj++*.deb
-elif [ "$1" = "RPM" ]; then
-      sudo rpm -i libpmemobj++*.rpm
+cmake .. -DCPACK_GENERATOR="$PACKAGE_TYPE" -DCMAKE_INSTALL_PREFIX=$PREFIX
+
+if [ "$PACKAGE_TYPE" = "" ]; then
+	make -j$(nproc) install
+else
+	make -j$(nproc) package
+	if [ "$PACKAGE_TYPE" = "DEB" ]; then
+		sudo dpkg -i libpmemobj++*.deb
+	elif [ "$PACKAGE_TYPE" = "RPM" ]; then
+		sudo rpm -i libpmemobj++*.rpm
+	fi
 fi
 
 cd ../..

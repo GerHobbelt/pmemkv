@@ -1,3 +1,14 @@
+pmemkv (1.1-1) unstable; urgency=medium
+
+  * New upstream release.
+    + Make the build reproducible (Closes: #943829; thanks lamby!).
+  * Bump {Build,Test}-Dependencies.
+  * Update expected test output.
+  * Bump symbols.
+  * R³.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Fri, 31 Jan 2020 20:03:48 +0100
+
 pmemkv (1.0.1-1) unstable; urgency=medium
 
   * Upstream release.

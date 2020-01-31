@@ -17,6 +17,7 @@ Iterating existing keys
   visited: key3
   visited: key2
   visited: key1
+Defragmenting the database
 Removing existing key
 Closing database
 END

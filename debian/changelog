@@ -1,3 +1,12 @@
+pmemkv (1.2-1) unstable; urgency=medium
+
+  * New upstream release.
+    + Make the build reproducible again.  Closes: #952990
+  * Bump pmemobj-cpp dependency.
+  * Add pmdk-tools and libunwind-dev to B-Deps.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Fri, 29 May 2020 17:29:05 +0200
+
 pmemkv (1.1-2) unstable; urgency=medium
 
   * Workaround a missing include in memkind headers, fixes FTBFS with

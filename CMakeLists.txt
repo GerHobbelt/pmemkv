@@ -1,33 +1,5 @@
-#
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright 2017-2020, Intel Corporation
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in
-#       the documentation and/or other materials provided with the
-#       distribution.
-#
-#     * Neither the name of the copyright holder nor the names of its
-#       contributors may be used to endorse or promote products derived
-#       from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 cmake_minimum_required(VERSION 3.10)
 project(pmemkv)
@@ -51,8 +23,13 @@ endif()
 option(BUILD_DOC "build documentation" ON)
 option(BUILD_EXAMPLES "build examples" ON)
 option(BUILD_TESTS "build tests" ON)
-option(TESTS_USE_VALGRIND "enable tests with valgrind (if found)" ON)
 option(BUILD_JSON_CONFIG "build the 'libpmemkv_json_config' library" ON)
+
+option(TESTS_LONG "enable long running tests" OFF)
+option(TESTS_USE_FORCED_PMEM "run tests with PMEM_IS_PMEM_FORCE=1" OFF)
+option(TESTS_USE_VALGRIND "enable tests with valgrind (if found)" ON)
+option(TESTS_PMEMOBJ_DRD_HELGRIND "enable test of pmemobj engines under drd and helgrind (they should only be run on PMEM)")
+option(TESTS_JSON "enable tests which require libpmemkv_json_config library (BUILD_JSON_CONFIG have to be ON)" ON)
 
 option(COVERAGE "run coverage test" OFF)
 if(COVERAGE)
@@ -64,6 +41,7 @@ endif()
 option(ENGINE_CMAP "enable cmap engine" ON)
 option(ENGINE_VCMAP "enable vcmap engine" ON)
 option(ENGINE_VSMAP "enable vsmap engine" ON)
+option(ENGINE_CSMAP "enable experimental csmap engine (requires CXX_STANDARD to be set to value >= 14)" OFF)
 option(ENGINE_CACHING "enable experimental caching engine" OFF)
 option(ENGINE_STREE "enable experimental stree engine" OFF)
 option(ENGINE_TREE3 "enable experimental tree3 engine" OFF)
@@ -80,6 +58,12 @@ if(ENGINE_CMAP)
 	message(STATUS "CMAP engine is ON")
 else()
 	message(STATUS "CMAP engine is OFF")
+endif()
+if(ENGINE_CSMAP)
+	add_definitions(-DENGINE_CSMAP)
+	message(STATUS "CSMAP engine is ON")
+else()
+	message(STATUS "CSMAP engine is OFF")
 endif()
 if(ENGINE_VCMAP)
 	add_definitions(-DENGINE_VCMAP)
@@ -128,6 +112,12 @@ if(ENGINE_CMAP)
 		src/engines/cmap.cc
 	)
 endif()
+if(ENGINE_CSMAP)
+	list(APPEND SOURCE_FILES
+		src/engines-experimental/csmap.h
+		src/engines-experimental/csmap.cc
+	)
+endif()
 if(ENGINE_VCMAP)
 	list(APPEND SOURCE_FILES
 		src/engines/vcmap.h
@@ -168,8 +158,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD ${CXX_STANDARD})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
-set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.9)
+set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.10)
 set(LIBPMEMOBJ_REQUIRED_VERSION 1.8)
+set(LIBPMEM_REQUIRED_VERSION 1.7)
 set(MEMKIND_REQUIRED_VERSION 1.8.0)
 
 if(DEVELOPER_MODE)
@@ -201,7 +192,11 @@ set(PKG_CONFIG_REQUIRES)
 set(DEB_DEPENDS)
 set(RPM_DEPENDS)
 
-if(ENGINE_VSMAP OR ENGINE_VCMAP OR ENGINE_CMAP OR ENGINE_STREE OR ENGINE_TREE3)
+if (ENGINE_CSMAP AND CXX_STANDARD LESS 14)
+	message(FATAL_ERROR "CXX_STANDARD must be >= 14 if ENGINE_CSMAP is set")
+endif()
+
+if(ENGINE_VSMAP OR ENGINE_VCMAP OR ENGINE_CMAP OR ENGINE_CSMAP OR ENGINE_STREE OR ENGINE_TREE3)
 	include(libpmemobj++)
 	list(APPEND PKG_CONFIG_REQUIRES "libpmemobj++ >= ${LIBPMEMOBJ_CPP_REQUIRED_VERSION}")
 	list(APPEND RPM_DEPENDS "libpmemobj >= ${LIBPMEMOBJ_REQUIRED_VERSION}")
@@ -234,8 +229,6 @@ string(REPLACE ";" " " PKG_CONFIG_REQUIRES "${PKG_CONFIG_REQUIRES}")
 string(REPLACE ";" ", " RPM_PACKAGE_REQUIRES "${RPM_DEPENDS}")
 string(REPLACE ";" ", " DEB_PACKAGE_REQUIRES "${DEB_DEPENDS}")
 
-add_executable(check_license EXCLUDE_FROM_ALL utils/check_license/check-license.c)
-
 add_custom_target(checkers ALL)
 add_custom_target(cppstyle)
 add_custom_target(cppformat)
@@ -243,9 +236,7 @@ add_custom_target(check-whitespace)
 add_custom_target(check-license
 	COMMAND ${CMAKE_SOURCE_DIR}/utils/check_license/check-headers.sh
 		${CMAKE_SOURCE_DIR}
-		${CMAKE_BINARY_DIR}/check_license
-		${CMAKE_SOURCE_DIR}/LICENSE)
-add_dependencies(check-license check_license)
+		BSD-3-Clause)
 
 add_custom_target(check-whitespace-main
 		COMMAND ${PERL_EXECUTABLE}
@@ -264,7 +255,7 @@ if(CHECK_CPP_STYLE)
 			message(FATAL_ERROR "required clang-format version is ${CLANG_FORMAT_REQUIRED} (version ${CLANG_FORMAT_VERSION} is installed)")
 		endif()
 	else()
-		message(WARNING "clang-format not found - C++ sources will not be checked (required version: ${CLANG_FORMAT_REQUIRED})")
+		message(FATAL_ERROR "CHECK_CPP_STYLE=ON, but clang-format not found (required version: ${CLANG_FORMAT_REQUIRED})")
 	endif()
 endif()
 
@@ -293,7 +284,7 @@ set_target_properties(pmemkv PROPERTIES SOVERSION 1)
 target_link_libraries(pmemkv PRIVATE
 	-Wl,--version-script=${CMAKE_SOURCE_DIR}/src/libpmemkv.map)
 
-if(ENGINE_VSMAP OR ENGINE_VCMAP OR ENGINE_CMAP OR ENGINE_STREE OR ENGINE_TREE3)
+if(ENGINE_VSMAP OR ENGINE_VCMAP OR ENGINE_CMAP OR ENGINE_CSMAP OR ENGINE_STREE OR ENGINE_TREE3)
 	target_link_libraries(pmemkv PRIVATE ${LIBPMEMOBJ++_LIBRARIES})
 endif()
 if(ENGINE_VSMAP OR ENGINE_VCMAP)
@@ -306,60 +297,6 @@ if(ENGINE_CACHING)
 	target_link_libraries(pmemkv PRIVATE ${CMAKE_THREAD_LIBS_INIT} memcached)
 	target_link_libraries(pmemkv PRIVATE acl_cpp protocol acl)
 endif()
-
-target_include_directories(pmemkv PRIVATE src/valgrind)
-# Enable libpmemobj-cpp valgrind annotations
-target_compile_options(pmemkv PRIVATE -DLIBPMEMOBJ_CPP_VG_ENABLED=1)
-
-if(BUILD_TESTS)
-	if (TESTS_USE_VALGRIND)
-		if(PKG_CONFIG_FOUND)
-			pkg_check_modules(VALGRIND QUIET valgrind)
-		else()
-			find_package(VALGRIND QUIET)
-		endif()
-
-		if(NOT VALGRIND_FOUND)
-			message(FATAL_ERROR "Valgrind not found, but flag TESTS_USE_VALGRIND was set.")
-		endif()
-
-		find_pmemcheck()
-
-		if(NOT VALGRIND_PMEMCHECK_FOUND)
-			message(WARNING "Valgrind pmemcheck not found. Some tests will be skipped.")
-		elseif((NOT(PMEMCHECK_VERSION LESS 1.0)) AND PMEMCHECK_VERSION LESS 2.0)
-			message(STATUS "Pmemcheck ${PMEMCHECK_VERSION} found")
-			find_program(PMREORDER names pmreorder HINTS ${CMAKE_INSTALL_PREFIX}/bin)
-			if(PMREORDER)
-				message(STATUS "Pmreorder found")
-				set(ENV{PATH} ${CMAKE_INSTALL_PREFIX}/bin:$ENV{PATH})
-				set(PMREORDER_SUPPORTED true CACHE INTERNAL "pmreorder support")
-			endif()
-		else()
-			message(WARNING "Pmreorder will not be used and some tests will be skipped. "
-					"Pmemcheck must be installed in version 1.x "
-					"(currently installed version is ${PMEMCHECK_VERSION})")
-		endif()
-	endif()
-
-	enable_testing()
-	add_subdirectory(tests)
-endif()
-
-configure_file(libpmemkv.pc.in libpmemkv.pc @ONLY)
-install(FILES ${CMAKE_BINARY_DIR}/libpmemkv.pc
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
-
-set_target_properties(pmemkv PROPERTIES PUBLIC_HEADER "src/libpmemkv.h;src/libpmemkv.hpp")
-
-if(BUILD_DOC)
-	add_subdirectory(doc)
-endif()
-
-install(TARGETS pmemkv
-		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(BUILD_JSON_CONFIG)
 	include(rapidjson)
@@ -390,6 +327,59 @@ if(BUILD_JSON_CONFIG)
 		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+target_include_directories(pmemkv PRIVATE src/valgrind)
+# Enable libpmemobj-cpp valgrind annotations
+target_compile_options(pmemkv PRIVATE -DLIBPMEMOBJ_CPP_VG_ENABLED=1)
+
+if(BUILD_EXAMPLES)
+	add_subdirectory(examples)
+endif()
+
+set(TEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/test
+	CACHE STRING "working directory for tests")
+
+if(BUILD_TESTS)
+	if(PKG_CONFIG_FOUND)
+		pkg_check_modules(VALGRIND QUIET valgrind)
+	else()
+		find_package(VALGRIND QUIET)
+	endif()
+
+	if(NOT VALGRIND_FOUND AND TESTS_USE_VALGRIND)
+		message(FATAL_ERROR "Valgrind not found, but flag TESTS_USE_VALGRIND was set.")
+	endif()
+
+	if(VALGRIND_FOUND)
+		find_pmemcheck()
+	endif()
+
+	if(PKG_CONFIG_FOUND)
+		pkg_check_modules(LIBPMEMOBJ REQUIRED libpmemobj>=${LIBPMEMOBJ_REQUIRED_VERSION})
+		pkg_check_modules(LIBPMEM REQUIRED libpmem>=${LIBPMEM_REQUIRED_VERSION})
+	else()
+		find_package(LIBPMEMOBJ REQUIRED ${LIBPMEMOBJ_REQUIRED_VERSION})
+		find_package(LIBPMEM REQUIRED ${LIBPMEM_REQUIRED_VERSION})
+	endif()
+
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
+configure_file(libpmemkv.pc.in libpmemkv.pc @ONLY)
+install(FILES ${CMAKE_BINARY_DIR}/libpmemkv.pc
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+set_target_properties(pmemkv PROPERTIES PUBLIC_HEADER "src/libpmemkv.h;src/libpmemkv.hpp")
+
+if(BUILD_DOC)
+	add_subdirectory(doc)
+endif()
+
+install(TARGETS pmemkv
+		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 configure_file(
 	"${CMAKE_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
@@ -400,6 +390,7 @@ add_custom_target(uninstall
 
 add_cppstyle(src ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/*.h*
+		${CMAKE_CURRENT_SOURCE_DIR}/src/comparator/*.h*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines/*.c*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines/*.h*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines-experimental/*.c*
@@ -408,15 +399,12 @@ add_cppstyle(src ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*
 
 add_check_whitespace(src ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/*.h*
+		${CMAKE_CURRENT_SOURCE_DIR}/src/comparator/*.h*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines/*.c*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines/*.h*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines-experimental/*.c*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines-experimental/*.h*
 		${CMAKE_CURRENT_SOURCE_DIR}/src/engines-experimental/stree/*.h*)
-
-if(BUILD_EXAMPLES)
-	add_subdirectory(examples)
-endif()
 
 if(NOT "${CPACK_GENERATOR}" STREQUAL "")
 	include(${CMAKE_SOURCE_DIR}/cmake/packages.cmake)

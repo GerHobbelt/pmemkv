@@ -1,34 +1,5 @@
-/*
- * Copyright 2017-2020, Intel Corporation
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *
- *     * Neither the name of the copyright holder nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
+/* Copyright 2017-2020, Intel Corporation */
 
 #ifndef LIBPMEMKV_H
 #define LIBPMEMKV_H
@@ -52,13 +23,18 @@ extern "C" {
 #define PMEMKV_STATUS_WRONG_ENGINE_NAME 9
 #define PMEMKV_STATUS_TRANSACTION_SCOPE_ERROR 10
 #define PMEMKV_STATUS_DEFRAG_ERROR 11
+#define PMEMKV_STATUS_COMPARATOR_MISMATCH 12
 
 typedef struct pmemkv_db pmemkv_db;
 typedef struct pmemkv_config pmemkv_config;
+typedef struct pmemkv_comparator pmemkv_comparator;
 
 typedef int pmemkv_get_kv_callback(const char *key, size_t keybytes, const char *value,
 				   size_t valuebytes, void *arg);
 typedef void pmemkv_get_v_callback(const char *value, size_t valuebytes, void *arg);
+
+typedef int pmemkv_compare_function(const char *key1, size_t keybytes1, const char *key2,
+				    size_t keybytes2, void *arg);
 
 pmemkv_config *pmemkv_config_new(void);
 void pmemkv_config_delete(pmemkv_config *config);
@@ -66,6 +42,8 @@ int pmemkv_config_put_data(pmemkv_config *config, const char *key, const void *v
 			   size_t value_size);
 int pmemkv_config_put_object(pmemkv_config *config, const char *key, void *value,
 			     void (*deleter)(void *));
+int pmemkv_config_put_object_cb(pmemkv_config *config, const char *key, void *value,
+				void *(*getter)(void *), void (*deleter)(void *));
 int pmemkv_config_put_uint64(pmemkv_config *config, const char *key, uint64_t value);
 int pmemkv_config_put_int64(pmemkv_config *config, const char *key, int64_t value);
 int pmemkv_config_put_string(pmemkv_config *config, const char *key, const char *value);
@@ -75,6 +53,10 @@ int pmemkv_config_get_object(pmemkv_config *config, const char *key, void **valu
 int pmemkv_config_get_uint64(pmemkv_config *config, const char *key, uint64_t *value);
 int pmemkv_config_get_int64(pmemkv_config *config, const char *key, int64_t *value);
 int pmemkv_config_get_string(pmemkv_config *config, const char *key, const char **value);
+
+pmemkv_comparator *pmemkv_comparator_new(pmemkv_compare_function *fn, const char *name,
+					 void *arg);
+void pmemkv_comparator_delete(pmemkv_comparator *comparator);
 
 int pmemkv_open(const char *engine, pmemkv_config *config, pmemkv_db **db);
 void pmemkv_close(pmemkv_db *kv);

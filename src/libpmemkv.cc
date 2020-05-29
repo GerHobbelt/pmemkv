@@ -1,39 +1,11 @@
-/*
- * Copyright 2017-2020, Intel Corporation
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in
- *       the documentation and/or other materials provided with the
- *       distribution.
- *
- *     * Neither the name of the copyright holder nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
+/* Copyright 2017-2020, Intel Corporation */
 
 #include <memory>
 
 #include <sys/stat.h>
 
+#include "comparator/comparator.h"
 #include "config.h"
 #include "engine.h"
 #include "exceptions.h"
@@ -56,6 +28,18 @@ static inline pmemkv_config *config_from_internal(pmem::kv::internal::config *co
 static inline pmem::kv::internal::config *config_to_internal(pmemkv_config *config)
 {
 	return reinterpret_cast<pmem::kv::internal::config *>(config);
+}
+
+static inline pmemkv_comparator *
+comparator_from_internal(pmem::kv::internal::comparator *comparator)
+{
+	return reinterpret_cast<pmemkv_comparator *>(comparator);
+}
+
+static inline pmem::kv::internal::comparator *
+comparator_to_internal(pmemkv_comparator *comparator)
+{
+	return reinterpret_cast<pmem::kv::internal::comparator *>(comparator);
 }
 
 static inline pmem::kv::engine_base *db_to_internal(pmemkv_db *db)
@@ -85,6 +69,9 @@ static inline int catch_and_return_status(const char *func_name, Function &&f)
 	} catch (pmem::transaction_scope_error &e) {
 		out_err_stream(func_name) << e.what();
 		return PMEMKV_STATUS_TRANSACTION_SCOPE_ERROR;
+	} catch (std::exception &e) {
+		out_err_stream(func_name) << e.what();
+		return PMEMKV_STATUS_UNKNOWN_ERROR;
 	} catch (...) {
 		out_err_stream(func_name) << "Unspecified error";
 		return PMEMKV_STATUS_UNKNOWN_ERROR;
@@ -137,6 +124,18 @@ int pmemkv_config_put_object(pmemkv_config *config, const char *key, void *value
 
 	return catch_and_return_status(__func__, [&] {
 		config_to_internal(config)->put_object(key, value, deleter);
+		return PMEMKV_STATUS_OK;
+	});
+}
+
+int pmemkv_config_put_object_cb(pmemkv_config *config, const char *key, void *value,
+				void *(*getter)(void *), void (*deleter)(void *))
+{
+	if (!config || !getter)
+		return PMEMKV_STATUS_INVALID_ARGUMENT;
+
+	return catch_and_return_status(__func__, [&] {
+		config_to_internal(config)->put_object(key, value, deleter, getter);
 		return PMEMKV_STATUS_OK;
 	});
 }
@@ -235,15 +234,45 @@ int pmemkv_config_get_string(pmemkv_config *config, const char *key, const char 
 	});
 }
 
+pmemkv_comparator *pmemkv_comparator_new(pmemkv_compare_function *fn, const char *name,
+					 void *arg)
+{
+	if (!fn || !name) {
+		ERR() << "comparison function and name must not be NULL";
+		return nullptr;
+	}
+
+	try {
+		return comparator_from_internal(
+			new pmem::kv::internal::comparator(fn, name, arg));
+	} catch (const std::exception &exc) {
+		ERR() << exc.what();
+		return nullptr;
+	} catch (...) {
+		ERR() << "Unspecified failure";
+		return nullptr;
+	}
+}
+
+void pmemkv_comparator_delete(pmemkv_comparator *comparator)
+{
+	try {
+		delete comparator_to_internal(comparator);
+	} catch (const std::exception &exc) {
+		ERR() << exc.what();
+	} catch (...) {
+		ERR() << "Unspecified failure";
+	}
+}
+
 int pmemkv_open(const char *engine_c_str, pmemkv_config *config, pmemkv_db **db)
 {
+	std::unique_ptr<pmem::kv::internal::config> cfg(config_to_internal(config));
+
 	if (!db)
 		return PMEMKV_STATUS_INVALID_ARGUMENT;
 
 	return catch_and_return_status(__func__, [&] {
-		std::unique_ptr<pmem::kv::internal::config> cfg(
-			config_to_internal(config));
-
 		auto engine = pmem::kv::engine_base::create_engine(engine_c_str,
 								   std::move(cfg));
 

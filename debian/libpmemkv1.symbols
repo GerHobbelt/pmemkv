@@ -2,6 +2,8 @@ libpmemkv.so.1 libpmemkv1 #MINVER#
 * Build-Depends-Package: libpmemkv-dev
  LIBPMEMKV_1.0@LIBPMEMKV_1.0 1.0
  pmemkv_close@LIBPMEMKV_1.0 1.0
+ pmemkv_comparator_delete@LIBPMEMKV_1.0 1.2
+ pmemkv_comparator_new@LIBPMEMKV_1.0 1.2
  pmemkv_config_delete@LIBPMEMKV_1.0 1.0
  pmemkv_config_get_data@LIBPMEMKV_1.0 1.0
  pmemkv_config_get_int64@LIBPMEMKV_1.0 1.0
@@ -12,6 +14,7 @@ libpmemkv.so.1 libpmemkv1 #MINVER#
  pmemkv_config_put_data@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_int64@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_object@LIBPMEMKV_1.0 1.0
+ pmemkv_config_put_object_cb@LIBPMEMKV_1.0 1.2
  pmemkv_config_put_string@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_uint64@LIBPMEMKV_1.0 1.0
  pmemkv_count_above@LIBPMEMKV_1.0 1.0

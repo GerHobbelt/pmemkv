@@ -10,6 +10,7 @@ Build-Depends: cmake,
                libtbb-dev,
                pandoc,
                pkg-config,
+               pmdk-tools,
                rapidjson-dev,
                valgrind,
 Standards-Version: 4.5.0

@@ -1,3 +1,10 @@
+pmemkv (1.2-2) unstable; urgency=medium
+
+  * Add symbols that appeared in 1.2.
+  * Paper over libunwind calling close(-1)/  Closes: #967091.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Mon, 31 Aug 2020 11:06:30 +0200
+
 pmemkv (1.2-1) unstable; urgency=medium
 
   * New upstream release.

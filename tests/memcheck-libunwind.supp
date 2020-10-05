@@ -22,7 +22,7 @@
    ...
 }
 {
-   invalid file descriptor -1 in syscall close()
+   libunwind exception suppresion
    Memcheck:Param
    write(buf)
    ...

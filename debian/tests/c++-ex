@@ -19,5 +19,6 @@ Iterating existing keys
   visited: key1
 Defragmenting the database
 Removing existing key
+NOT_FOUND (2)
 Closing database
 END

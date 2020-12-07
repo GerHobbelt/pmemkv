@@ -25,7 +25,7 @@ Package: libpmemkv-dev
 Section: libdevel
 Architecture: amd64
 Multi-Arch: same
-Depends: libpmemkv1 (= ${binary:Version}), ${misc:Depends}
+Depends: libpmemkv1 (= ${binary:Version}), libpmemobj-cpp-dev (>= 1.10~), ${misc:Depends}
 Description: key:value data store for persistent memory
  Pmemkv is a family of key:value stores, developed with persistent memory
  in mind -- yet rather than being tied to a single backing implementation,

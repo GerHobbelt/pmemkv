@@ -11,10 +11,15 @@ libpmemkv.so.1 libpmemkv1 #MINVER#
  pmemkv_config_get_string@LIBPMEMKV_1.0 1.0
  pmemkv_config_get_uint64@LIBPMEMKV_1.0 1.0
  pmemkv_config_new@LIBPMEMKV_1.0 1.0
+ pmemkv_config_put_comparator@LIBPMEMKV_1.0 1.3
  pmemkv_config_put_data@LIBPMEMKV_1.0 1.0
+ pmemkv_config_put_force_create@LIBPMEMKV_1.0 1.3
  pmemkv_config_put_int64@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_object@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_object_cb@LIBPMEMKV_1.0 1.2
+ pmemkv_config_put_oid@LIBPMEMKV_1.0 1.3
+ pmemkv_config_put_path@LIBPMEMKV_1.0 1.3
+ pmemkv_config_put_size@LIBPMEMKV_1.0 1.3
  pmemkv_config_put_string@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_uint64@LIBPMEMKV_1.0 1.0
  pmemkv_count_above@LIBPMEMKV_1.0 1.0

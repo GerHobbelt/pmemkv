@@ -3,6 +3,7 @@ Priority: optional
 Maintainer: Adam Borowski <kilobyte@angband.pl>
 Build-Depends: cmake,
                debhelper-compat (= 12),
+               gdb,
                libgtest-dev,
                libmemkind-dev (>= 1.10~),
                libpmemobj-cpp-dev (>= 1.10~),

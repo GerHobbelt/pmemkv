@@ -2,7 +2,7 @@ Source: pmemkv
 Priority: optional
 Maintainer: Adam Borowski <kilobyte@angband.pl>
 Build-Depends: cmake,
-               debhelper-compat (= 12),
+               debhelper-compat (= 13),
                gdb,
                libgtest-dev,
                libmemkind-dev (>= 1.10~),

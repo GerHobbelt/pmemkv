@@ -24,7 +24,7 @@ Vcs-Git: https://github.com/kilobyte/pmemkv -b debian
 
 Package: libpmemkv-dev
 Section: libdevel
-Architecture: amd64
+Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
 Depends: libpmemkv1 (= ${binary:Version}), libpmemobj-cpp-dev (>= 1.12~), ${misc:Depends}
 Description: key:value data store for persistent memory
@@ -36,7 +36,7 @@ Description: key:value data store for persistent memory
  This package contains the development headers.
 
 Package: libpmemkv1
-Architecture: amd64
+Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: key:value data store for persistent memory

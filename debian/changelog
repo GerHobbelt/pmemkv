@@ -1,3 +1,14 @@
+pmemkv (1.4~rc1-1) experimental; urgency=medium
+
+  * New upstream RC.
+  * Enable arm64 and ppc64el.
+  * Bump build-depend versions.
+  * Add gdb for tests.
+  * Add new symbols.
+  * dh 13.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 11 Feb 2021 00:00:06 +0100
+
 pmemkv (1.3-1) unstable; urgency=medium
 
   * New upstream release.

@@ -39,34 +39,34 @@ libpmemkv.so.1 libpmemkv1 #MINVER#
  pmemkv_get_copy@LIBPMEMKV_1.0 1.0
  pmemkv_get_equal_above@LIBPMEMKV_1.0 1.1
  pmemkv_get_equal_below@LIBPMEMKV_1.0 1.1
- pmemkv_iterator_delete@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_is_next@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_key@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_new@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_next@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_prev@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_read_range@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_higher@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_higher_eq@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_lower@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_lower_eq@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_to_first@LIBPMEMKV_1.0 1.4~
- pmemkv_iterator_seek_to_last@LIBPMEMKV_1.0 1.4~
+ pmemkv_iterator_delete@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_is_next@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_key@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_new@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_next@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_prev@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_read_range@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_higher@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_higher_eq@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_lower@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_lower_eq@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_to_first@LIBPMEMKV_1.0 1.4
+ pmemkv_iterator_seek_to_last@LIBPMEMKV_1.0 1.4
  pmemkv_open@LIBPMEMKV_1.0 1.0
  pmemkv_put@LIBPMEMKV_1.0 1.0
  pmemkv_remove@LIBPMEMKV_1.0 1.0
- pmemkv_tx_abort@LIBPMEMKV_1.0 1.4~
- pmemkv_tx_begin@LIBPMEMKV_1.0 1.4~
- pmemkv_tx_commit@LIBPMEMKV_1.0 1.4~
- pmemkv_tx_end@LIBPMEMKV_1.0 1.4~
- pmemkv_tx_put@LIBPMEMKV_1.0 1.4~
- pmemkv_tx_remove@LIBPMEMKV_1.0 1.4~
- pmemkv_write_iterator_abort@LIBPMEMKV_1.0 1.4~
- pmemkv_write_iterator_commit@LIBPMEMKV_1.0 1.4~
- pmemkv_write_iterator_delete@LIBPMEMKV_1.0 1.4~
- pmemkv_write_iterator_new@LIBPMEMKV_1.0 1.4~
- pmemkv_write_iterator_write_range@LIBPMEMKV_1.0 1.4~
+ pmemkv_tx_abort@LIBPMEMKV_1.0 1.4
+ pmemkv_tx_begin@LIBPMEMKV_1.0 1.4
+ pmemkv_tx_commit@LIBPMEMKV_1.0 1.4
+ pmemkv_tx_end@LIBPMEMKV_1.0 1.4
+ pmemkv_tx_put@LIBPMEMKV_1.0 1.4
+ pmemkv_tx_remove@LIBPMEMKV_1.0 1.4
+ pmemkv_write_iterator_abort@LIBPMEMKV_1.0 1.4
+ pmemkv_write_iterator_commit@LIBPMEMKV_1.0 1.4
+ pmemkv_write_iterator_delete@LIBPMEMKV_1.0 1.4
+ pmemkv_write_iterator_new@LIBPMEMKV_1.0 1.4
+ pmemkv_write_iterator_write_range@LIBPMEMKV_1.0 1.4
 libpmemkv_json_config.so.1 libpmemkv1 #MINVER#
  LIBPMEMKV_JSON_CONFIG_1.0@LIBPMEMKV_JSON_CONFIG_1.0 1.0
  pmemkv_config_from_json@LIBPMEMKV_JSON_CONFIG_1.0 1.0

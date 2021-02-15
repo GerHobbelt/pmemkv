@@ -1,6 +1,6 @@
-Wed Feb 10 2021 Igor Chorążewicz <igor.chorazewicz@intel.com>
+Mon Feb 15 2021 Igor Chorążewicz <igor.chorazewicz@intel.com>
 
-	* Version 1.4-rc1
+	* Version 1.4
 
 	Features:
 	- new experimental engine - robinhood (concurrent, unsorted,

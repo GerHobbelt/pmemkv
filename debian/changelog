@@ -1,3 +1,9 @@
+pmemkv (1.4-1) unstable; urgency=medium
+
+  * Upload upstream release to unstable.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Mon, 15 Feb 2021 16:37:23 +0100
+
 pmemkv (1.4~rc1-1) experimental; urgency=medium
 
   * New upstream RC.

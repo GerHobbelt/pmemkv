@@ -1,3 +1,11 @@
+pmemkv (1.5.0~rc1-1) experimental; urgency=medium
+
+  * New upstream RC.
+  * Bump build-depend versions (libpmemobj-cpp 1.13, libpmem 1.9.1).
+  * Add new symbols.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Mon, 26 Jul 2021 14:11:24 +0200
+
 pmemkv (1.4-1) unstable; urgency=medium
 
   * Upload upstream release to unstable.

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.3)
 project(pmemkv)
 set(PMEMKV_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-include(cmake/helpers.cmake)
+include(${PMEMKV_ROOT_DIR}/cmake/helpers.cmake)
 set_version(VERSION)
 
 # ----------------------------------------------------------------- #
@@ -19,13 +19,15 @@ option(BUILD_JSON_CONFIG "build the 'libpmemkv_json_config' library" ON)
 
 option(TESTS_LONG "enable long running tests" OFF)
 option(TESTS_USE_FORCED_PMEM "run tests with PMEM_IS_PMEM_FORCE=1 - it speeds up tests execution on emulated pmem" OFF)
-option(TESTS_USE_VALGRIND "enable tests with valgrind (if found)" ON)
+option(TESTS_USE_VALGRIND "enable tests with valgrind (fail build if Valgrind not found)" ON)
 option(TESTS_PMEMOBJ_DRD_HELGRIND "enable test of pmemobj engines under drd and helgrind (they should only be run on PMEM)" OFF)
 option(TESTS_JSON "enable tests which require libpmemkv_json_config library (BUILD_JSON_CONFIG has to be ON)" ON)
 
 option(COVERAGE "enable collecting of coverage data" OFF)
 option(DEVELOPER_MODE "enable developer's checks" OFF)
 option(CHECK_CPP_STYLE "check code style of C++ sources" OFF)
+option(USE_ASAN "enable AddressSanitizer (debugging)" OFF)
+option(USE_UBSAN "enable UndefinedBehaviorSanitizer (debugging)" OFF)
 option(USE_CCACHE "use ccache if it is available in the system" ON)
 
 # Each engine can be enabled separately.
@@ -37,6 +39,7 @@ option(ENGINE_STREE "enable experimental stree engine" ON)
 option(ENGINE_TREE3 "enable experimental tree3 engine" OFF)
 option(ENGINE_RADIX "enable experimental radix engine" OFF)
 option(ENGINE_ROBINHOOD "enable experimental robinhood engine (requires CXX_STANDARD to be set to value >= 14)" OFF)
+option(ENGINE_DRAM_VCMAP "enable testing dram_vcmap engine" OFF)
 
 # ----------------------------------------------------------------- #
 ## Set required and useful variables
@@ -47,21 +50,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD ${CXX_STANDARD})
 
 # Specify and print the build type
-if(EXISTS "${PMEMKV_ROOT_DIR}/.git")
-	# current sources were downloaded using git, so we assume it's for debug (developing) purposes
-	set(DEFAULT_BUILD_TYPE "Debug")
-else()
-	set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
-endif()
+set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
 set(predefined_build_types
 	Debug
 	Release
 	RelWithDebInfo
 	MinSizeRel)
 if(NOT CMAKE_BUILD_TYPE)
-	message(STATUS "CMAKE_BUILD_TYPE not set, setting the default one: ${DEFAULT_BUILD_TYPE}")
-	set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}"
-		CACHE STRING "choose the type of build (${predefined_build_types})" FORCE STRINGS)
+	set(CMAKE_BUILD_TYPE ${DEFAULT_BUILD_TYPE}
+		CACHE STRING "choose the type of build (${predefined_build_types})" FORCE)
+	message(STATUS "CMAKE_BUILD_TYPE not set, setting the default one: ${CMAKE_BUILD_TYPE}")
 else()
 	message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 	if(NOT CMAKE_BUILD_TYPE IN_LIST predefined_build_types)
@@ -71,17 +69,18 @@ else()
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PMEMKV_ROOT_DIR}/cmake)
-set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.12)
+set(LIBPMEMOBJ_CPP_REQUIRED_VERSION 1.13.0)
 set(LIBPMEMOBJ_REQUIRED_VERSION 1.9.1)
 set(LIBPMEM_REQUIRED_VERSION 1.7)
 set(MEMKIND_REQUIRED_VERSION 1.8.0)
+set(RAPIDJSON_REQUIRED_VERSION 1.0.0)
 
 set(PKG_CONFIG_REQUIRES)
 set(DEB_DEPENDS)
 set(RPM_DEPENDS)
 
 set(TEST_DIR ${CMAKE_CURRENT_BINARY_DIR}/test CACHE STRING "working directory for tests")
-message(STATUS "TEST_DIR set to: ${TEST_DIR}")
+message(STATUS "TEST_DIR set to: \"${TEST_DIR}\"")
 
 # Do not treat include directories from the interfaces
 # of consumed Imported Targets as SYSTEM by default.
@@ -113,6 +112,7 @@ if(ENGINE_CSMAP)
 endif()
 if(ENGINE_VCMAP)
 	list(APPEND SOURCE_FILES
+		src/engines/basic_vcmap.h
 		src/engines/vcmap.h
 		src/engines/vcmap.cc
 	)
@@ -148,6 +148,13 @@ if(ENGINE_ROBINHOOD)
 		src/engines-experimental/robinhood.cc
 		src/fast_hash.h
 		src/fast_hash.cc
+	)
+endif()
+if(ENGINE_DRAM_VCMAP)
+	list(APPEND SOURCE_FILES
+		src/engines/basic_vcmap.h
+		src/engines-testing/dram_vcmap.h
+		src/engines-testing/dram_vcmap.cc
 	)
 endif()
 
@@ -210,12 +217,24 @@ if(ENGINE_ROBINHOOD)
 else()
 	message(STATUS "ROBINHOOD engine is OFF")
 endif()
+if(ENGINE_DRAM_VCMAP)
+	add_definitions(-DENGINE_DRAM_VCMAP)
+	message(STATUS "DRAM_VCMAP engine is ON")
+else()
+	message(STATUS "DRAM_VCMAP engine is OFF")
+endif()
 
 # ----------------------------------------------------------------- #
 ## Set compiler's flags
 # ----------------------------------------------------------------- #
 if(DEVELOPER_MODE)
 	add_common_flag(-Werror)
+endif()
+if(USE_ASAN)
+	add_sanitizer_flag(address)
+endif()
+if(USE_UBSAN)
+	add_sanitizer_flag(undefined)
 endif()
 if(COVERAGE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -coverage")
@@ -264,16 +283,13 @@ if(ENGINE_VSMAP OR ENGINE_VCMAP)
 	list(APPEND DEB_DEPENDS "libmemkind0 (>= ${MEMKIND_REQUIRED_VERSION})")
 endif()
 
-if(ENGINE_VCMAP)
+if(ENGINE_VCMAP OR ENGINE_DRAM_VCMAP)
 	include(tbb)
+	add_definitions(-DTBB_DEFINE_STD_HASH_SPECIALIZATIONS)
 	list(APPEND PKG_CONFIG_REQUIRES tbb)
 	list(APPEND RPM_DEPENDS tbb)
 	list(APPEND DEB_DEPENDS libtbb2)
 endif()
-
-string(REPLACE ";" " " PKG_CONFIG_REQUIRES "${PKG_CONFIG_REQUIRES}")
-string(REPLACE ";" ", " RPM_PACKAGE_REQUIRES "${RPM_DEPENDS}")
-string(REPLACE ";" ", " DEB_PACKAGE_REQUIRES "${DEB_DEPENDS}")
 
 # ----------------------------------------------------------------- #
 ## Link libraries, setup targets
@@ -291,34 +307,8 @@ target_link_libraries(pmemkv PRIVATE ${LIBPMEMOBJ++_LIBRARIES})
 if(ENGINE_VSMAP OR ENGINE_VCMAP)
 	target_link_libraries(pmemkv PRIVATE ${MEMKIND_LIBRARIES})
 endif()
-if(ENGINE_VCMAP)
+if(ENGINE_VCMAP OR ENGINE_DRAM_VCMAP)
 	target_link_libraries(pmemkv PRIVATE ${TBB_LIBRARIES})
-endif()
-
-# ----------------------------------------------------------------- #
-## Configure make install/uninstall and packages
-# ----------------------------------------------------------------- #
-configure_file(libpmemkv.pc.in libpmemkv.pc @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libpmemkv.pc
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
-
-set_target_properties(pmemkv PROPERTIES PUBLIC_HEADER "src/libpmemkv.h;src/libpmemkv.hpp")
-
-install(TARGETS pmemkv
-		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-configure_file(
-	"${PMEMKV_ROOT_DIR}/cmake/cmake_uninstall.cmake.in"
-	"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-	IMMEDIATE @ONLY)
-
-add_custom_target(uninstall
-	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-
-if(NOT "${CPACK_GENERATOR}" STREQUAL "")
-	include(${PMEMKV_ROOT_DIR}/cmake/packages.cmake)
 endif()
 
 # ----------------------------------------------------------------- #
@@ -332,6 +322,10 @@ add_custom_target(check-license
 	COMMAND ${PMEMKV_ROOT_DIR}/utils/check_license/check-headers.sh
 		${PMEMKV_ROOT_DIR}
 		BSD-3-Clause)
+add_custom_target(copyright-format
+	COMMAND ${PMEMKV_ROOT_DIR}/utils/check_license/check-headers.sh
+		${PMEMKV_ROOT_DIR}
+		BSD-3-Clause -d)
 
 if(CHECK_CPP_STYLE)
 	# check for required programs for code style check and add dependency to ALL
@@ -397,6 +391,9 @@ add_check_whitespace(src ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*
 # ----------------------------------------------------------------- #
 if(BUILD_JSON_CONFIG)
 	include(rapidjson)
+	list(APPEND PKG_CONFIG_REQUIRES "RapidJSON >= ${RAPIDJSON_REQUIRED_VERSION}")
+	list(APPEND RPM_DEPENDS "rapidjson-devel >= ${RAPIDJSON_REQUIRED_VERSION}")
+	list(APPEND DEB_DEPENDS "rapidjson-dev (>= ${RAPIDJSON_REQUIRED_VERSION})")
 	add_definitions(-DBUILD_JSON_CONFIG)
 
 	set(SOURCE_FILES_JSON_CONFIG
@@ -435,4 +432,34 @@ endif()
 
 if(BUILD_DOC)
 	add_subdirectory(doc)
+endif()
+
+# ----------------------------------------------------------------- #
+## Configure make install/uninstall and packages
+# ----------------------------------------------------------------- #
+string(REPLACE ";" " " PKG_CONFIG_REQUIRES "${PKG_CONFIG_REQUIRES}")
+string(REPLACE ";" ", " RPM_PACKAGE_REQUIRES "${RPM_DEPENDS}")
+string(REPLACE ";" ", " DEB_PACKAGE_REQUIRES "${DEB_DEPENDS}")
+
+configure_file(libpmemkv.pc.in libpmemkv.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libpmemkv.pc
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+set_target_properties(pmemkv PROPERTIES PUBLIC_HEADER "src/libpmemkv.h;src/libpmemkv.hpp")
+
+install(TARGETS pmemkv
+		PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+configure_file(
+	"${PMEMKV_ROOT_DIR}/cmake/cmake_uninstall.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+	IMMEDIATE @ONLY)
+
+add_custom_target(uninstall
+	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+
+if(NOT "${CPACK_GENERATOR}" STREQUAL "")
+	include(${PMEMKV_ROOT_DIR}/cmake/packages.cmake)
 endif()

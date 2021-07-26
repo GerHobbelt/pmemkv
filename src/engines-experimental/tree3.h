@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2017-2020, Intel Corporation */
+/* Copyright 2017-2021, Intel Corporation */
 
-#pragma once
+#ifndef LIBPMEMKV_TREE3_H
+#define LIBPMEMKV_TREE3_H
 
 #include "../pmemobj_engine.h"
 
@@ -220,5 +221,20 @@ private:
 	unique_ptr<internal::tree3::KVNode> tree_top; // pointer to uppermost inner node
 };
 
+class tree3_factory : public engine_base::factory_base {
+public:
+	unique_ptr<engine_base> create(unique_ptr<internal::config> cfg) override
+	{
+		check_config_null(get_name(), cfg);
+		return unique_ptr<engine_base>(new tree3(move(cfg)));
+	};
+	std::string get_name() override
+	{
+		return "tree3";
+	};
+};
+
 } /* namespace kv */
 } /* namespace pmem */
+
+#endif /* LIBPMEMKV_TREE3_H */

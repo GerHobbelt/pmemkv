@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2019-2020, Intel Corporation */
+/* Copyright 2019-2021, Intel Corporation */
 
 #ifndef LIBPMEMKV_PMEMOBJ_ENGINE_H
 #define LIBPMEMKV_PMEMOBJ_ENGINE_H
-
-#include <iostream>
-#include <unistd.h>
 
 #include "engine.h"
 #include "libpmemkv.h"
@@ -28,11 +25,10 @@ namespace kv
 template <typename EngineData>
 class pmemobj_engine_base : public engine_base {
 public:
-	pmemobj_engine_base(std::unique_ptr<internal::config> &cfg,
+	pmemobj_engine_base(const std::unique_ptr<internal::config> &cfg,
 			    const std::string &layout)
 	{
 		const char *path = nullptr;
-		std::size_t size;
 		PMEMoid *oid;
 
 		auto is_path = cfg->get_string("path", &path);
@@ -45,27 +41,50 @@ public:
 			throw internal::invalid_argument(
 				"Config does not contain item with key: \"path\" or \"oid\"");
 		} else if (is_path) {
-			uint64_t force_create;
+			uint64_t create_or_error_if_exists = 0;
+			uint64_t create_if_missing = 0;
 			cfg_by_path = true;
 
-			if (!cfg->get_uint64("force_create", &force_create)) {
-				force_create = 0;
+			cfg->get_uint64("create_if_missing", &create_if_missing);
+			if (!cfg->get_uint64("create_or_error_if_exists",
+					     &create_or_error_if_exists)) {
+				/* 'force_create' is here for compatibility with bindings,
+				 * which may still use this flag in their API */
+				cfg->get_uint64("force_create",
+						&create_or_error_if_exists);
 			}
 
-			pmem::obj::pool<Root> pop;
-			if (force_create) {
-				if (!cfg->get_uint64("size", &size))
-					throw internal::invalid_argument(
-						"Config does not contain item with key: \"size\"");
-
-				pop = pmem::obj::pool<Root>::create(path, layout, size,
-								    S_IRWXU);
-			} else {
-				pop = pmem::obj::pool<Root>::open(path, layout);
+			if (create_if_missing && create_or_error_if_exists) {
+				throw internal::invalid_argument(
+					"Both flags set in config: \"create_if_missing\" and \"create_or_error_if_exists\"");
 			}
 
-			root_oid = pop.root()->ptr.raw_ptr();
-			pmpool = pop;
+			if (create_if_missing || create_or_error_if_exists) {
+				bool failed_open = false;
+				if (!create_or_error_if_exists)
+					try {
+						pmpool = pmem::obj::pool<Root>::open(
+							path, layout);
+					} catch (pmem::pool_invalid_argument &e) {
+						failed_open = true;
+					}
+
+				if (failed_open || create_or_error_if_exists) {
+					auto size = cfg->get_size();
+					pmpool = create_or_fail(path, size, layout);
+				}
+			} else { /* no flags set, just open */
+				try {
+					pmpool =
+						pmem::obj::pool<Root>::open(path, layout);
+				} catch (pmem::pool_invalid_argument &e) {
+					throw internal::invalid_argument(e.what());
+				}
+			}
+
+			root_oid = static_cast<pmem::obj::pool<Root>>(pmpool)
+					   .root()
+					   ->ptr.raw_ptr();
 
 		} else if (is_oid) {
 			pmpool = pmem::obj::pool_base(pmemobj_pool_by_ptr(oid));
@@ -75,20 +94,35 @@ public:
 
 	~pmemobj_engine_base()
 	{
-		if (cfg_by_path)
-			pmpool.close();
+		if (cfg_by_path) {
+			try {
+				pmpool.close();
+			} catch (const std::logic_error &e) {
+				std::terminate();
+			}
+		}
 	}
 
 protected:
 	struct Root {
-		pmem::obj::persistent_ptr<EngineData>
-			ptr; /* used when path is specified */
+		/* field ptr used when path is specified */
+		pmem::obj::persistent_ptr<EngineData> ptr;
 	};
 
 	pmem::obj::pool_base pmpool;
 	PMEMoid *root_oid;
-
 	bool cfg_by_path = false;
+
+private:
+	pmem::obj::pool<Root> create_or_fail(const char *path, const std::size_t size,
+					     const std::string &layout)
+	{
+		try {
+			return pmem::obj::pool<Root>::create(path, layout, size, S_IRWXU);
+		} catch (pmem::pool_invalid_argument &e) {
+			throw internal::invalid_argument(e.what());
+		}
+	}
 };
 
 } /* namespace kv */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2020, Intel Corporation */
+/* Copyright 2020-2021, Intel Corporation */
 
 /**
  * Test basic methods available in iterators (sorted and unsorted engines).
@@ -129,6 +129,23 @@ static void write_abort_test(pmem::kv::db &kv)
 	verify_keys<false>(it);
 }
 
+static void zeroed_key_test(pmem::kv::db &kv)
+{
+	auto element = pmem::kv::string_view("z\0z", 3);
+	UT_ASSERTeq(element.size(), 3);
+
+	auto s = kv.put(element, "val1");
+	ASSERT_STATUS(s, pmem::kv::status::OK);
+
+	s = kv.exists(element);
+	ASSERT_STATUS(s, pmem::kv::status::OK);
+
+	auto it = new_iterator<true>(kv);
+	s = it.seek(element);
+	ASSERT_STATUS(s, pmem::kv::status::OK);
+	verify_key<true>(it, element);
+}
+
 static void test(int argc, char *argv[])
 {
 	if (argc < 3)
@@ -140,6 +157,7 @@ static void test(int argc, char *argv[])
 				 seek_test<false>,
 				 write_test,
 				 write_abort_test,
+				 zeroed_key_test,
 			 });
 }
 

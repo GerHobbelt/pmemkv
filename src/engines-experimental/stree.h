@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2017-2020, Intel Corporation */
+/* Copyright 2017-2021, Intel Corporation */
 
-#pragma once
+#ifndef LIBPMEMKV_STREE_H
+#define LIBPMEMKV_STREE_H
 
 #include <libpmemobj++/container/string.hpp>
 #include <libpmemobj++/make_persistent.hpp>
@@ -80,8 +81,6 @@ public:
 private:
 	stree(const stree &);
 	void operator=(const stree &);
-	status iterate(container_iterator first, container_iterator last,
-		       get_kv_callback *callback, void *arg);
 	void Recover();
 
 	internal::stree::btree_type *my_btree;
@@ -89,7 +88,7 @@ private:
 };
 
 template <>
-class stree::stree_iterator<true> : virtual public internal::iterator_base {
+class stree::stree_iterator<true> : public internal::iterator_base {
 	using container_type = stree::container_type;
 
 public:
@@ -134,5 +133,21 @@ private:
 	std::vector<std::pair<std::string, size_t>> log;
 };
 
+class stree_factory : public engine_base::factory_base {
+public:
+	std::unique_ptr<engine_base>
+	create(std::unique_ptr<internal::config> cfg) override
+	{
+		check_config_null(get_name(), cfg);
+		return std::unique_ptr<engine_base>(new stree(std::move(cfg)));
+	};
+	std::string get_name() override
+	{
+		return "stree";
+	};
+};
+
 } /* namespace kv */
 } /* namespace pmem */
+
+#endif /* LIBPMEMKV_STREE_H */

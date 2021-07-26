@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright 2019-2021, Intel Corporation
 
+#
+# helpers.cmake - helper functions for top-level CMakeLists.txt
+#
+
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 
+# Sets project's version based on git output, in ${VERSION}
 function(set_version VERSION)
 	set(VERSION_FILE ${PMEMKV_ROOT_DIR}/VERSION)
 	if(EXISTS ${VERSION_FILE})
@@ -119,7 +124,7 @@ function(get_program_version_major_minor name ret)
 	execute_process(COMMAND ${name} --version
 		OUTPUT_VARIABLE cmd_ret
 		ERROR_QUIET)
-	STRING(REGEX MATCH "([0-9]+.)([0-9]+.)" VERSION ${cmd_ret})
+	STRING(REGEX MATCH "([0-9]+)\.([0-9]+)" VERSION ${cmd_ret})
 	SET(${ret} ${VERSION} PARENT_SCOPE)
 endfunction()
 
@@ -181,4 +186,21 @@ endmacro()
 macro(add_common_flag flag)
 	add_c_flag(${flag} ${ARGV1})
 	add_cxx_flag(${flag} ${ARGV1})
+endmacro()
+
+# Adds sanitizer flag for CXX compiler.
+# It's used to check i.a. for USAN/UBSAN sanitizers, as an additional static analysis.
+macro(add_sanitizer_flag flag)
+	set(SAVED_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
+	set(CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES} -fsanitize=${flag}")
+
+	check_cxx_compiler_flag("-fsanitize=${flag}" CXX_HAS_ASAN_UBSAN)
+	if(CXX_HAS_ASAN_UBSAN)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=${flag}")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${flag}")
+	else()
+		message("${flag} sanitizer not supported")
+	endif()
+
+	set(CMAKE_REQUIRED_LIBRARIES ${SAVED_CMAKE_REQUIRED_LIBRARIES})
 endmacro()

@@ -1,3 +1,64 @@
+Fri Jul 23 2021 Igor Chorążewicz <igor.chorazewicz@intel.com>
+
+	* Version 1.5.0-rc1
+
+	New features:
+	- Introduce (optional) caching layer in radix engine. It can be enabled
+		via config parameters
+	- Add new config's flag - 'create_if_missing' to address the missing functionality.
+		If set, pmemkv tries to open the pool and creates it if missing.
+		It's mutually exclusive with 'create_or_error_if_exists' flag
+
+	Bug fixes:
+	- Return correct status for wrong parameters in pmemkv_config_from_json
+		(instead of failing on assert)
+	- Fix iterator::key() implementation to return the whole key, not only
+		the part up to the first null-terminator
+	- Return correct status from memkind-based engines on open failure
+
+	Other changes:
+	- Add alias 'create_or_error_if_exists' for 'force_create' config's flag and
+		deprecate the latter one. The old flag can still be used and it behaves
+		with no difference. It's discouraged from using, though
+	- Add dram_vcmap engine based on tbb::concurrent_hash_map for benchmarking
+		purposes
+	- Switch default CMake's build type from "Debug" to "RelWithDebInfo"
+		when compiling from sources - it's relevant for a GitHub users
+		(who may e.g. run some benchmarks)
+
+Tue Jul 06 2021 Łukasz Stolarczuk <lukasz.stolarczuk@intel.com>
+
+	* Version 1.2.1
+
+	This is the last bugfix release for pmemkv 1.2 version.
+	Maintenance of this version is no longer supported.
+
+	Notable changes:
+	- fix of missing checks in move assigment operators
+	- stree: fix operator== by adding missing const specifier
+	- stree: fix missing check in node_iterator operator=
+	- json_config: return error code for wrong parameters, instead of asserting them
+	- json config: extend error messages
+
+Mon Jun 28 2021 Łukasz Stolarczuk <lukasz.stolarczuk@intel.com>
+
+	* Version 1.1.1
+
+	This is the last bugfix release for pmemkv 1.1 version.
+	Maintenance of this version is no longer supported.
+
+	Notable changes:
+	- json_config: return error status for improper parameters instead of
+		asserting nullptr (and crashing)
+	- fix error messages for NOT_FOUND and STOPPED_BY_CB statuses (which are not errors)
+		by omitting setting (error) message from the previous status
+	- vcmap: fix put() implementation (to be thread-safe)
+		and decrease the number of temporary string allocations
+	- vcmap: fix value_type for concurrent_hash_map
+	- vcmap: fix to work with the latest TBB (2021.1) #894
+	- stree: fix operator==
+	- clarify and extend documentation
+
 Mon Feb 15 2021 Igor Chorążewicz <igor.chorazewicz@intel.com>
 
 	* Version 1.4
@@ -26,7 +87,7 @@ Tue Oct 06 2020 Szymon Romik <szymon.romik@intel.com>
 	* Version 1.0.3
 
 	This is the last bugfix release for pmemkv 1.0 version.
-	Maintance of this version is no longer supported.
+	Maintenance of this version is no longer supported.
 
 	Notable changes:
 	- VSmap::put method refactor (to use emplace)
@@ -62,7 +123,7 @@ Fri May 29 2020 Szymon Romik <szymon.romik@intel.com>
 
 	* Version 1.2
 
-	This release introduces a new experimantal engine - csmap (cuncurrent
+	This release introduces a new experimental engine - csmap (concurrent
 	sorted map, backed by libpmemobj-cpp's concurrent_map).
 
 	We have also provided support for custom comparators for sorted engines.

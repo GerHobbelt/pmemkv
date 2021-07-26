@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2017-2020, Intel Corporation */
+/* Copyright 2017-2021, Intel Corporation */
 
 #include "cmap.h"
 #include "../out.h"
@@ -44,15 +44,9 @@ status cmap::get_all(get_kv_callback *callback, void *arg)
 {
 	LOG("get_all");
 	check_outside_tx();
-	for (auto it = container->begin(); it != container->end(); ++it) {
-		auto ret = callback(it->first.c_str(), it->first.size(),
-				    it->second.c_str(), it->second.size(), arg);
-
-		if (ret != 0)
-			return status::STOPPED_BY_CB;
-	}
-
-	return status::OK;
+	auto it = container->begin();
+	auto end = container->end();
+	return internal::iterate_through_pairs(it, end, callback, arg);
 }
 
 status cmap::exists(string_view key)
@@ -167,7 +161,7 @@ result<string_view> cmap::cmap_iterator<true>::key()
 {
 	assert(!acc_.empty());
 
-	return {{acc_->first.c_str()}};
+	return string_view(acc_->first.c_str(), acc_->first.length());
 }
 
 result<pmem::obj::slice<const char *>> cmap::cmap_iterator<true>::read_range(size_t pos,
@@ -213,5 +207,7 @@ void cmap::cmap_iterator<false>::abort()
 	log.clear();
 }
 
+static factory_registerer
+	register_cmap(std::unique_ptr<engine_base::factory_base>(new cmap_factory));
 } // namespace kv
 } // namespace pmem

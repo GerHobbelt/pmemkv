@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2020, Intel Corporation */
+/* Copyright 2020-2021, Intel Corporation */
 
 #include "csmap.h"
+
+#include "../iterator.h"
 #include "../out.h"
 
 namespace pmem
@@ -35,15 +37,6 @@ status csmap::count_all(std::size_t &cnt)
 	return status::OK;
 }
 
-template <typename It>
-static std::size_t size(It first, It last)
-{
-	auto dist = std::distance(first, last);
-	assert(dist >= 0);
-
-	return static_cast<std::size_t>(dist);
-}
-
 status csmap::count_above(string_view key, std::size_t &cnt)
 {
 	LOG("count_above for key=" << std::string(key.data(), key.size()));
@@ -54,7 +47,7 @@ status csmap::count_above(string_view key, std::size_t &cnt)
 	auto first = container->upper_bound(key);
 	auto last = container->end();
 
-	cnt = size(first, last);
+	cnt = internal::distance(first, last);
 
 	return status::OK;
 }
@@ -69,7 +62,7 @@ status csmap::count_equal_above(string_view key, std::size_t &cnt)
 	auto first = container->lower_bound(key);
 	auto last = container->end();
 
-	cnt = size(first, last);
+	cnt = internal::distance(first, last);
 
 	return status::OK;
 }
@@ -84,7 +77,7 @@ status csmap::count_equal_below(string_view key, std::size_t &cnt)
 	auto first = container->begin();
 	auto last = container->upper_bound(key);
 
-	cnt = size(first, last);
+	cnt = internal::distance(first, last);
 
 	return status::OK;
 }
@@ -99,7 +92,7 @@ status csmap::count_below(string_view key, std::size_t &cnt)
 	auto first = container->begin();
 	auto last = container->lower_bound(key);
 
-	cnt = size(first, last);
+	cnt = internal::distance(first, last);
 
 	return status::OK;
 }
@@ -115,7 +108,7 @@ status csmap::count_between(string_view key1, string_view key2, std::size_t &cnt
 		auto first = container->upper_bound(key1);
 		auto last = container->lower_bound(key2);
 
-		cnt = size(first, last);
+		cnt = internal::distance(first, last);
 	} else {
 		cnt = 0;
 	}
@@ -428,7 +421,7 @@ result<string_view> csmap::csmap_iterator<true>::key()
 {
 	assert(it_ != container->end());
 
-	return {it_->first.cdata()};
+	return string_view(it_->first.data(), it_->first.length());
 }
 
 result<pmem::obj::slice<const char *>> csmap::csmap_iterator<true>::read_range(size_t pos,
@@ -486,6 +479,9 @@ void csmap::csmap_iterator<false>::init_seek()
 
 	log.clear();
 }
+
+static factory_registerer
+	register_csmap(std::unique_ptr<engine_base::factory_base>(new csmap_factory));
 
 } // namespace kv
 } // namespace pmem

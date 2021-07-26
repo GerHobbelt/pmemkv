@@ -90,6 +90,9 @@ static inline int catch_and_return_status(const char *func_name, Function &&f)
 	} catch (std::runtime_error &e) {
 		out_err_stream(func_name) << e.what();
 		status = PMEMKV_STATUS_UNKNOWN_ERROR;
+	} catch (std::invalid_argument &e) {
+		out_err_stream(func_name) << e.what();
+		status = PMEMKV_STATUS_INVALID_ARGUMENT;
 	} catch (pmem::transaction_scope_error &e) {
 		out_err_stream(func_name) << e.what();
 		status = PMEMKV_STATUS_TRANSACTION_SCOPE_ERROR;
@@ -209,9 +212,22 @@ int pmemkv_config_put_path(pmemkv_config *config, const char *value)
 	return pmemkv_config_put_string(config, "path", value);
 }
 
+/* deprecated */
 int pmemkv_config_put_force_create(pmemkv_config *config, bool value)
 {
-	return pmemkv_config_put_uint64(config, "force_create", value ? 1 : 0);
+	return pmemkv_config_put_create_or_error_if_exists(config, value);
+}
+
+int pmemkv_config_put_create_or_error_if_exists(pmemkv_config *config, bool value)
+{
+	return pmemkv_config_put_uint64(config, "create_or_error_if_exists",
+					static_cast<std::uint64_t>(value));
+}
+
+int pmemkv_config_put_create_if_missing(pmemkv_config *config, bool value)
+{
+	return pmemkv_config_put_uint64(config, "create_if_missing",
+					static_cast<std::uint64_t>(value));
 }
 
 int pmemkv_config_put_comparator(pmemkv_config *config, pmemkv_comparator *comparator)
@@ -396,8 +412,8 @@ int pmemkv_open(const char *engine_c_str, pmemkv_config *config, pmemkv_db **db)
 		return PMEMKV_STATUS_INVALID_ARGUMENT;
 
 	return catch_and_return_status(__func__, [&] {
-		auto engine = pmem::kv::engine_base::create_engine(engine_c_str,
-								   std::move(cfg));
+		auto engine = pmem::kv::storage_engine_factory::create_engine(
+			engine_c_str, std::move(cfg));
 
 		*db = db_from_internal(engine.release());
 

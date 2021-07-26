@@ -2,7 +2,8 @@
 /* Copyright 2017-2021, Intel Corporation */
 
 #include "blackhole.h"
-#include <iostream>
+
+#include <../out.h>
 
 namespace pmem
 {
@@ -191,6 +192,9 @@ blackhole::blackhole_iterator::read_range(size_t pos, size_t n)
 
 	return status::NOT_FOUND;
 }
+
+static factory_registerer register_blackhole(
+	std::unique_ptr<engine_base::factory_base>(new blackhole_factory));
 
 } // namespace kv
 } // namespace pmem

@@ -21,10 +21,10 @@ Installation of Key-Value Datastore for Persistent Memory
 
 * **Linux 64-bit** (OSX and Windows are not yet supported)
 * **libpmem** and **libpmemobj**, which are part of [PMDK](https://github.com/pmem/pmdk) - Persistent Memory Development Kit 1.9.1
-* [**libpmemobj-cpp**](https://github.com/pmem/libpmemobj-cpp) - C++ PMDK bindings 1.12
+* [**libpmemobj-cpp**](https://github.com/pmem/libpmemobj-cpp) - C++ PMDK bindings 1.13.0
 * [**memkind**](https://github.com/memkind/memkind) - Volatile memory manager 1.8.0 (required by vsmap & vcmap engines)
 * [**TBB**](https://github.com/01org/tbb) - Thread Building Blocks (required by vcmap engine)
-* [**RapidJSON**](https://github.com/tencent/rapidjson) - JSON parser (required by `libpmemkv_json_config` helper library)
+* [**RapidJSON**](https://github.com/tencent/rapidjson) - JSON parser 1.0.0 (required by `libpmemkv_json_config` helper library)
 * Used only for **testing**:
 	* [**pmempool**](https://github.com/pmem/pmdk/tree/master/src/tools/pmempool) - pmempool utility, part of PMDK
 	* [**valgrind**](https://github.com/pmem/valgrind) - tool for profiling and memory leak detection. *pmem* forked version with *pmemcheck*
@@ -36,6 +36,13 @@ Installation of Key-Value Datastore for Persistent Memory
 	* [**perl**](https://www.perl.org/) - for whitespace checker script
 	* [**clang format**](https://clang.llvm.org/docs/ClangFormat.html) - to format and check coding style, version 9.0 is required
 
+Required packages (or their names) for some OSes may differ. Some examples or scripts in this
+repository may require additional dependencies, but should not interrupt the build.
+
+See our **[Dockerfiles](utils/docker/images)** (used e.g. on our CI
+systems) to get an idea what packages are required to build
+the entire pmemkv, with all tests and examples.
+
 ### Building pmemkv and running tests
 
 ```sh
@@ -43,31 +50,23 @@ git clone https://github.com/pmem/pmemkv
 cd pmemkv
 mkdir ./build
 cd ./build
-cmake .. -DBUILD_TESTS=ON   # run CMake
-make -j$(nproc)             # build everything
-make test                   # run all tests
+cmake .. -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug    # run CMake, prepare Debug version
+make -j$(nproc)                 # build everything
+make test                       # run all tests
 ```
 
-Instead of the last command (`make test`) you can run
+To see the output of failed tests, instead of the last command (`make test`) you can run:
 
 ```sh
 ctest --output-on-failure
 ```
 
-to see the output of failed tests.
-
 Building of the `libpmemkv_json_config` helper library is enabled by default.
-If you want to disable it (for example to get rid of the RapidJSON dependency)
-run:
+If you want to disable it (for example to get rid of the RapidJSON dependency),
+instead of a standard `cmake ..` command run:
 
 ```sh
 cmake .. -DBUILD_JSON_CONFIG=OFF
-```
-
-instead of:
-
-```sh
-cmake ..
 ```
 
 ### Managing shared library
@@ -75,15 +74,16 @@ cmake ..
 To package `pmemkv` as a shared library and install on your system:
 
 ```sh
-sudo make install		# install shared library to the default location: /usr/local
-sudo make uninstall		# remove shared library and headers
+cmake .. [-DCMAKE_BUILD_TYPE=Release]	# prepare e.g. Release version
+sudo make install			# install shared library to the default location: /usr/local
+sudo make uninstall			# remove shared library and headers
 ```
 
 To install this library into other locations, pass appropriate value to cmake
 using CMAKE_INSTALL_PREFIX variable like this:
 
 ```sh
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr [-DCMAKE_BUILD_TYPE=Release]
 sudo make install		# install to path specified by CMAKE_INSTALL_PREFIX
 sudo make uninstall		# remove shared library and headers from path specified by CMAKE_INSTALL_PREFIX
 ```
@@ -104,13 +104,8 @@ make test            # or 'ctest --output-on-failure'
 
 ## Installing on Fedora
 
-Install required packages (this list may be outdated, to see comprehensive list of packages
-used in our CI see a Fedora image in [utils directory](./utils/docker/images/)):
-
-```sh
-su -c 'dnf install autoconf automake cmake daxctl-devel gcc gcc-c++ \
-	libtool ndctl-devel numactl-devel rapidjson-devel tbb-devel'
-```
+Install required packages (see comprehensive list of packages used in our CI
+on a Fedora image in [utils directory](./utils/docker/images/)):
 
 Configure for proxy if necessary:
 
@@ -160,8 +155,8 @@ Finally [build and install pmemkv from sources](#building-from-sources).
 
 ## Installing on Ubuntu
 
-Install required packages (this list may be outdated. To see comprehensive list of packages
-used in our CI see an Ubuntu image in [utils directory](./utils/docker/images/)):
+Install required packages (see comprehensive list of packages used in our CI
+on a Ubuntu image in [utils directory](./utils/docker/images/)):
 
 ```sh
 sudo apt install autoconf automake build-essential cmake libdaxctl-dev \
@@ -230,7 +225,7 @@ engine in [ENGINES-experimental.md](doc/ENGINES-experimental.md).
 
 ```sh
 ...
-cmake .. -DCPACK_GENERATOR="$GEN" -DCMAKE_INSTALL_PREFIX=/usr
+cmake .. -DCPACK_GENERATOR="$GEN" -DCMAKE_INSTALL_PREFIX=/usr [-DCMAKE_BUILD_TYPE=Release]
 make -j$(nproc) package
 ```
 

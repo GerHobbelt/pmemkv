@@ -39,46 +39,49 @@ int main(int argc, char *argv[])
 	ASSERT(s == status::OK);
 	s = cfg.put_size(SIZE);
 	ASSERT(s == status::OK);
-	s = cfg.put_force_create(true);
+	s = cfg.put_create_if_missing(true);
 	ASSERT(s == status::OK);
 
+	/* Alternatively create_or_error_if_exists flag can be set, to fail if file exists
+	 * For differences between the two flags, see e.g. libpmemkv(7) manpage. */
+	/* s = cfg.put_create_or_error_if_exists(true); */
+
 	LOG("Opening pmemkv database with 'cmap' engine");
-	db *kv = new db();
-	ASSERT(kv != nullptr);
-	s = kv->open("cmap", std::move(cfg));
+	db kv;
+	s = kv.open("cmap", std::move(cfg));
 	ASSERT(s == status::OK);
 
 	LOG("Putting new key");
-	s = kv->put("key1", "value1");
+	s = kv.put("key1", "value1");
 	ASSERT(s == status::OK);
 
 	size_t cnt;
-	s = kv->count_all(cnt);
+	s = kv.count_all(cnt);
 	ASSERT(s == status::OK && cnt == 1);
 
 	LOG("Reading key back");
 	std::string value;
-	s = kv->get("key1", &value);
+	s = kv.get("key1", &value);
 	ASSERT(s == status::OK && value == "value1");
 
 	LOG("Iterating existing keys");
-	s = kv->put("key2", "value2");
+	s = kv.put("key2", "value2");
 	ASSERT(s == status::OK);
-	s = kv->put("key3", "value3");
+	s = kv.put("key3", "value3");
 	ASSERT(s == status::OK);
-	kv->get_all([](string_view k, string_view v) {
+	kv.get_all([](string_view k, string_view v) {
 		LOG("  visited: " << k.data());
 		return 0;
 	});
 
 	LOG("Defragmenting the database");
-	s = kv->defrag(0, 100);
+	s = kv.defrag(0, 100);
 	ASSERT(s == status::OK);
 
 	LOG("Removing existing key");
-	s = kv->remove("key1");
+	s = kv.remove("key1");
 	ASSERT(s == status::OK);
-	s = kv->exists("key1");
+	s = kv.exists("key1");
 	ASSERT(s == status::NOT_FOUND);
 
 	/* Examples of using pmem:kv:status with std::ostream and operator<<,
@@ -92,7 +95,6 @@ int main(int argc, char *argv[])
 	assert(oss.str() == "NOT_FOUND (2)");
 
 	LOG("Closing database");
-	delete kv;
 
 	return 0;
 }

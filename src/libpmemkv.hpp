@@ -41,7 +41,7 @@ namespace pmem
 namespace kv
 {
 /**
- * Partial string_view implemenetation, defined in pmem::obj namespace
+ * Partial string_view implementation, defined in pmem::obj namespace
  * in libpmemobj-cpp library (see: https://pmem.io/libpmemobj-cpp ).
  */
 using string_view = obj::string_view;
@@ -443,6 +443,9 @@ bool operator!=(const status &lhs, const result<T> &rhs)
 	details).
 */
 class config {
+#define force_create_deprecated                                                          \
+	__attribute__((deprecated("use config::put_create_or_error_if_exists instead")))
+
 public:
 	config() noexcept;
 	explicit config(pmemkv_config *cfg) noexcept;
@@ -462,7 +465,9 @@ public:
 
 	status put_size(std::uint64_t size) noexcept;
 	status put_path(const std::string &path) noexcept;
-	status put_force_create(bool value) noexcept;
+	status put_force_create(bool value) noexcept force_create_deprecated;
+	status put_create_or_error_if_exists(bool value) noexcept;
+	status put_create_if_missing(bool value) noexcept;
 	status put_oid(PMEMoid *oid) noexcept;
 	template <typename Comparator>
 	status put_comparator(Comparator &&comparator);
@@ -1043,7 +1048,7 @@ inline result<string_view> db::iterator<IsConst>::key() noexcept
  * @param[in] pos position of the element in a value which will be the first element in
  * the returned range (default = 0)
  * @param[in] n number of elements in range (default = std::numeric_limits<size_t>::max(),
- * if n is bigger than the length of a value it's automatically shrinked)
+ * if n is bigger than the length of a value it's automatically shrunk)
  *
  * @return pmem::kv::result<pmem::kv::string_view>
  */
@@ -1077,7 +1082,7 @@ inline result<string_view> db::iterator<IsConst>::read_range(size_t pos,
  * @param[in] pos position of the element in a value which will be the first element in
  * the returned range (default = 0)
  * @param[in] n number of elements in range (default = std::numeric_limits<size_t>::max(),
- * if n is bigger than the length of a value it's automatically shrinked)
+ * if n is bigger than the length of a value it's automatically shrunk)
  *
  * @return pmem::kv::result<pmem::obj::slice<db::iterator::OutputIterator<char>>>
  */
@@ -1474,7 +1479,7 @@ inline status config::put_string(const std::string &key,
 }
 
 /**
- * Puts size to a config
+ * Puts size to a config, it's required when creating new database pool.
  *
  * @param[in] size of the database in bytes.
  *
@@ -1486,7 +1491,7 @@ inline status config::put_size(std::uint64_t size) noexcept
 }
 
 /**
- * Puts path to a config.
+ * Puts path (of a database pool) to a config, to open or create.
  *
  * @param[in] path to a database file or to a poolset file (see **poolset**(5) for
  * details). Note that when using poolset file, size should be 0.
@@ -1499,22 +1504,52 @@ inline status config::put_path(const std::string &path) noexcept
 }
 
 /**
- * Puts force_create parameter to a config, For supporting engines If false,
- * pmemkv opens file specified by 'path', otherwise it creates it. False by
- * default.
+ * It's an alias for config::put_create_or_error_if_exists, kept for compatibility.
  *
+ * @deprecated use config::put_create_or_error_if_exists instead.
  * @return pmem::kv::status
  */
 inline status config::put_force_create(bool value) noexcept
 {
-	return put_uint64("force_create", value ? 1 : 0);
+	return put_create_or_error_if_exists(value);
 }
 
 /**
- * Puts PMEMoid object to a config
+ * Puts create_or_error_if_exists parameter to a config. This flag is mutually exclusive
+ * with **create_if_missing** (see config::put_create_if_missing).
+ * It works only with engines supporting this flag and it means:
+ * If true: pmemkv creates the pool, unless it exists - then it fails.
+ * If false: pmemkv opens the pool, unless the path does not exist - then it fails.
+ * False by default.
+ *
+ * @return pmem::kv::status
+ */
+inline status config::put_create_or_error_if_exists(bool value) noexcept
+{
+	return put_uint64("create_or_error_if_exists", static_cast<std::uint64_t>(value));
+}
+
+/**
+ * Puts create_if_missing parameter to a config. This flag is mutually exclusive
+ * with **create_or_error_if_exists** (see config::put_create_or_error_if_exists).
+ * It works only with engines supporting this flag and it means:
+ * If true: pmemkv tries to open the pool and if that doesn't succeed
+ *	  it means there's (most likely) no pool to use, so it creates it.
+ * If false: pmemkv opens the pool, unless the path does not exist - then it fails.
+ * False by default.
+ *
+ * @return pmem::kv::status
+ */
+inline status config::put_create_if_missing(bool value) noexcept
+{
+	return put_uint64("create_if_missing", static_cast<std::uint64_t>(value));
+}
+
+/**
+ * Puts PMEMoid object to a config.
  *
  * @param[in] oid pointer (for details see **libpmemobj**(7)) which points to the engine
- * data. If oid is null engine will allocate new data, otherwise it will use existing
+ * data. If oid is null, engine will allocate new data, otherwise it will use existing
  * one.
  *
  * @return pmem::kv::status

@@ -18,19 +18,19 @@
 # 2. "rebuild" param was passed as a first argument to this script.
 #
 # The script pulls the Docker image if:
-# 1. it does not have to be rebuilt (based on commited changes), or
+# 1. it does not have to be rebuilt (based on committed changes), or
 # 2. "pull" param was passed as a first argument to this script.
 #
 
 set -e
 
-source $(dirname $0)/set-ci-vars.sh
+source $(dirname ${0})/set-ci-vars.sh
 IMG_VER=${IMG_VER:-latest}
 TAG="${OS}-${OS_VER}-${IMG_VER}"
 IMAGES_DIR_NAME=images
 BASE_DIR=utils/docker/${IMAGES_DIR_NAME}
 
-if [[ -z "$OS" || -z "$OS_VER" ]]; then
+if [[ -z "${OS}" || -z "${OS_VER}" ]]; then
 	echo "ERROR: The variables OS and OS_VER have to be set properly " \
              "(eg. OS=fedora, OS_VER=32)."
 	exit 1
@@ -85,7 +85,7 @@ elif [[ "${1}" == "pull" ]]; then
 fi
 
 # Determine if we need to rebuild the image or just pull it from
-# the Container Registry, based on commited changes.
+# the Container Registry, based on committed changes.
 if [ -n "${CI_COMMIT_RANGE}" ]; then
 	commits=$(git rev-list ${CI_COMMIT_RANGE})
 else

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
-/* Copyright 2017-2020, Intel Corporation */
+/* Copyright 2017-2021, Intel Corporation */
 
-#pragma once
+#ifndef LIBPMEMKV_CMAP_H
+#define LIBPMEMKV_CMAP_H
 
 #include "../iterator.h"
 #include "../pmemobj_engine.h"
@@ -70,6 +71,7 @@ public:
 	cmap(std::unique_ptr<internal::config> cfg);
 	~cmap();
 
+	cmap() = delete;
 	cmap(const cmap &) = delete;
 	cmap &operator=(const cmap &) = delete;
 
@@ -98,7 +100,7 @@ private:
 };
 
 template <>
-class cmap::cmap_iterator<true> : virtual public internal::iterator_base {
+class cmap::cmap_iterator<true> : public internal::iterator_base {
 	using container_type = internal::cmap::map_t;
 
 public:
@@ -132,5 +134,21 @@ private:
 	std::vector<std::pair<std::string, size_t>> log;
 };
 
+class cmap_factory : public engine_base::factory_base {
+public:
+	std::unique_ptr<engine_base>
+	create(std::unique_ptr<internal::config> cfg) override
+	{
+		check_config_null(get_name(), cfg);
+		return std::unique_ptr<engine_base>(new cmap(std::move(cfg)));
+	};
+	std::string get_name() override
+	{
+		return "cmap";
+	};
+};
+
 } /* namespace kv */
 } /* namespace pmem */
+
+#endif /* LIBPMEMKV_CMAP_H */

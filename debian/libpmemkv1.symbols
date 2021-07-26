@@ -12,6 +12,8 @@ libpmemkv.so.1 libpmemkv1 #MINVER#
  pmemkv_config_get_uint64@LIBPMEMKV_1.0 1.0
  pmemkv_config_new@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_comparator@LIBPMEMKV_1.0 1.3
+ pmemkv_config_put_create_if_missing@LIBPMEMKV_1.0 1.5
+ pmemkv_config_put_create_or_error_if_exists@LIBPMEMKV_1.0 1.5
  pmemkv_config_put_data@LIBPMEMKV_1.0 1.0
  pmemkv_config_put_force_create@LIBPMEMKV_1.0 1.3
  pmemkv_config_put_int64@LIBPMEMKV_1.0 1.0

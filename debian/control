@@ -6,8 +6,8 @@ Build-Depends: cmake,
                gdb,
                libgtest-dev,
                libmemkind-dev (>= 1.10~),
-               libpmemobj-cpp-dev (>= 1.12~),
-               libpmemobj-dev (>= 1.9~),
+               libpmemobj-cpp-dev (>= 1.13~),
+               libpmemobj-dev (>= 1.9.1~),
                libtbb-dev,
                libunwind-dev,
                pandoc,
@@ -26,7 +26,7 @@ Package: libpmemkv-dev
 Section: libdevel
 Architecture: amd64 arm64 ppc64el
 Multi-Arch: same
-Depends: libpmemkv1 (= ${binary:Version}), libpmemobj-cpp-dev (>= 1.12~), ${misc:Depends}
+Depends: libpmemkv1 (= ${binary:Version}), libpmemobj-cpp-dev (>= 1.13~), ${misc:Depends}
 Description: key:value data store for persistent memory
  Pmemkv is a family of key:value stores, developed with persistent memory
  in mind -- yet rather than being tied to a single backing implementation,

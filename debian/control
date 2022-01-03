@@ -9,12 +9,12 @@ Build-Depends: cmake,
                libpmemobj-cpp-dev (>= 1.13~),
                libpmemobj-dev (>= 1.9.1~),
                libtbb-dev,
-               libunwind-dev,
+               libunwind-dev [!riscv64],
                pandoc,
                pkg-config,
                pmdk-tools,
                rapidjson-dev,
-               valgrind,
+               valgrind [!riscv64],
 Standards-Version: 4.6.0
 Rules-Requires-Root: no
 Section: libs
@@ -24,7 +24,7 @@ Vcs-Git: https://github.com/kilobyte/pmemkv -b debian
 
 Package: libpmemkv-dev
 Section: libdevel
-Architecture: amd64 arm64 ppc64el
+Architecture: amd64 arm64 ppc64el riscv64
 Multi-Arch: same
 Depends: libpmemkv1 (= ${binary:Version}), libpmemobj-cpp-dev (>= 1.13~), ${misc:Depends}
 Description: key:value data store for persistent memory
@@ -36,7 +36,7 @@ Description: key:value data store for persistent memory
  This package contains the development headers.
 
 Package: libpmemkv1
-Architecture: amd64 arm64 ppc64el
+Architecture: amd64 arm64 ppc64el riscv64
 Multi-Arch: same
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: key:value data store for persistent memory

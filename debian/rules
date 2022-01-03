@@ -12,6 +12,10 @@ ifeq ($(DEB_HOST_ARCH),riscv64)
 CONF_ARCH := -DTESTS_USE_VALGRIND=OFF
 endif
 override_dh_auto_configure:
+	printf 'nproc: %d (out of %d)\n' `nproc` `nproc --all`
+	free
+	df -h
+	stat -f .
 	dh_auto_configure -- -DCMAKE_BUILD_TYPE=RelWithDebInfo $(CONF_ARCH)
 
 # Tests for concurrent hashmap are currently not concurrent.

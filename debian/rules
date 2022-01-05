@@ -21,5 +21,6 @@ override_dh_auto_configure:
 # Tests for concurrent hashmap are currently not concurrent.
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
-	cd obj-$(DEB_HOST_GNU_TYPE) && PMEM_IS_PMEM_FORCE=1 ctest --output-on-failure -j1
+	cd obj-$(DEB_HOST_GNU_TYPE) && PMEM_IS_PMEM_FORCE=1 ctest --output-on-failure \
+		-j1 -E'vcmap__concurrent_put_get_remove_.*'
 endif

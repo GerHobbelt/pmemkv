@@ -22,5 +22,5 @@ override_dh_auto_configure:
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	cd obj-$(DEB_HOST_GNU_TYPE) && PMEM_IS_PMEM_FORCE=1 ctest --output-on-failure \
-		-j1 -E'vcmap__concurrent_put_get_remove_.*'
+		-j1 -E 'vcmap__concurrent_put_get_remove_.*'
 endif

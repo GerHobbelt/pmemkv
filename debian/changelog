@@ -1,3 +1,9 @@
+pmemkv (1.5.0-4) unstable; urgency=medium
+
+  * Exclude a flaky test following the syntax cmake wants.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Mon, 10 Jan 2022 10:11:05 +0100
+
 pmemkv (1.5.0-3) unstable; urgency=medium
 
   * Exclude a flaky test.

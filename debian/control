@@ -14,7 +14,7 @@ Build-Depends: cmake,
                pkg-config,
                pmdk-tools,
                rapidjson-dev,
-               valgrind [!riscv64],
+               valgrind-if-available,
 Standards-Version: 4.6.0
 Rules-Requires-Root: no
 Section: libs

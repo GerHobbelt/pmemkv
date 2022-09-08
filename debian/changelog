@@ -1,3 +1,10 @@
+pmemkv (1.5.0-5) unstable; urgency=medium
+
+  * B-Depend on valgrind-if-available.
+  * -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON for build reproducibility.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 08 Sep 2022 17:33:07 +0200
+
 pmemkv (1.5.0-4) unstable; urgency=medium
 
   * Exclude a flaky test following the syntax cmake wants.

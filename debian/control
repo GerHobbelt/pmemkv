@@ -15,7 +15,7 @@ Build-Depends: cmake,
                pmdk-tools,
                rapidjson-dev,
                valgrind-if-available,
-Standards-Version: 4.6.0
+Standards-Version: 4.6.1
 Rules-Requires-Root: no
 Section: libs
 Homepage: https://github.com/pmem/pmemkv

@@ -16,7 +16,8 @@ override_dh_auto_configure:
 	free
 	df -h
 	stat -f .
-	dh_auto_configure -- -DCMAKE_BUILD_TYPE=RelWithDebInfo $(CONF_ARCH)
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=RelWithDebInfo $(CONF_ARCH) \
+		-DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 
 # Tests for concurrent hashmap are currently not concurrent.
 override_dh_auto_test:
